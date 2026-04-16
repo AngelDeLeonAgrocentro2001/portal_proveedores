@@ -1,5 +1,7 @@
 <?php
-require_once __DIR__ . '/../config/config.php';
+// database/DatabaseCajas.php - Conexión a la base de PRODUCCIÓN (REMOTA)
+
+require_once BASE_PATH . 'config/config.php';
 
 class DatabaseCajas {
     private static $instance = null;
@@ -7,18 +9,33 @@ class DatabaseCajas {
 
     private function __construct() {
         try {
-            $this->pdo = new PDO(
-                "mysql:host=" . DB_HOST . ";dbname=" . DB_CAJAS . ";charset=utf8mb4",
-                DB_USER,
-                DB_PASS
-            );
+            // 🔥 USAR LA IP DEL SERVIDOR DE PRODUCCIÓN
+            $host = DB_HOST_LOCAL;      // IP del servidor remoto
+            $user = DB_USER_LOCAL;      // Usuario de producción
+            $pass = DB_PASS_LOCAL;      // Contraseña de producción
+            $db   = DB_CAJAS;          // Nombre de la base (cajas_chicas)
+            
+            // Opcional: Si el puerto es diferente a 3306
+            $port = 3306;  // Puerto por defecto de MySQL, cambiar si es necesario
+            
+            $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8";
+            
+            error_log("🔌 Conectando a base de datos PRODUCCIÓN: $host -> $db");
+            
+            $this->pdo = new PDO($dsn, $user, $pass);
+            
             $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            if (DEBUG_MODE) {
-                error_log("✅ Conexión exitosa a DB_CAJAS: " . DB_CAJAS);
-            }
+            $this->pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+            $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+            
+            // Forzar UTF-8
+            $this->pdo->exec("SET NAMES utf8");
+            
+            error_log("✅ Conexión exitosa a CAJAS_CHICAS (PRODUCCIÓN REMOTA)");
+
         } catch (PDOException $e) {
-            error_log("❌ Error DB Cajas Chicas: " . $e->getMessage());
-            throw new Exception("Error al conectar a la base de datos cajas_chicas");
+            error_log("❌ Error al conectar a CAJAS_CHICAS (PRODUCCIÓN): " . $e->getMessage());
+            throw new Exception("No se pudo conectar a la base de datos SAT de producción: " . $e->getMessage());
         }
     }
 

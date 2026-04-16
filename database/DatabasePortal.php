@@ -1,5 +1,7 @@
 <?php
-require_once __DIR__ . '/../config/config.php';
+// database/DatabasePortal.php
+
+require_once BASE_PATH . 'config/config.php';
 
 class DatabasePortal {
     private static $instance = null;
@@ -8,17 +10,18 @@ class DatabasePortal {
     private function __construct() {
         try {
             $this->pdo = new PDO(
-                "mysql:host=" . DB_HOST . ";dbname=" . DB_PORTAL . ";charset=utf8mb4",
-                DB_USER,
-                DB_PASS
+                "mysql:host=" . DB_HOST_LOCAL . ";dbname=" . DB_PORTAL . ";charset=utf8mb4",
+                DB_USER_LOCAL,
+                DB_PASS_LOCAL          // ← Contraseña correcta del portal
             );
             $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            if (DEBUG_MODE) {
-                error_log("✅ Conexión exitosa a DB_PORTAL: " . DB_PORTAL);
+            
+            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                error_log("✅ Conexión exitosa a base de datos PORTAL_PROVEEDORES");
             }
         } catch (PDOException $e) {
-            error_log("❌ Error DB Portal: " . $e->getMessage());
-            throw new Exception("Error al conectar a la base de datos del portal");
+            error_log("❌ Error al conectar a PORTAL_PROVEEDORES: " . $e->getMessage());
+            throw new Exception("Error de conexión a la base de datos del portal: " . $e->getMessage());
         }
     }
 
