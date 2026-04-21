@@ -156,4 +156,65 @@ class ProveedorModel {
         $stmt->execute([$cardcode]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+        // Obtener detalle completo de una Orden de Compra desde SAP (para PDF)
+    public function getOrdenCompraDetallada($docentry, $cardcode) {
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA('GT_AGROCENTRO_2016');
+
+            $query = "
+                SELECT 
+                    T0.\"DocNum\"       AS numero_oc,
+                    T0.\"CardCode\"     AS cardcode,
+                    T0.\"CardName\"     AS proveedor,
+                    T0.\"DocDate\"      AS fecha,
+                    T0.\"DocTotal\"     AS total,
+                    T0.\"Comments\"     AS observaciones,
+                    T1.\"OcrCode\"      AS centro_costo,
+                    T1.\"AcctCode\"     AS cuenta,
+                    T2.\"AcctName\"     AS nombre_cuenta,
+                    T1.\"Dscription\"   AS descripcion,
+                    T1.\"LineTotal\"    AS monto_linea
+                FROM OPOR T0
+                INNER JOIN POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+                INNER JOIN OACT T2 ON T1.\"AcctCode\" = T2.\"AcctCode\"
+                WHERE T0.\"DocEntry\" = ?
+                  AND T0.\"CardCode\" = ?
+                  AND T0.\"DocStatus\" = 'O'
+            ";
+
+            $stmt = odbc_prepare($conexion, $query);
+            odbc_execute($stmt, [$docentry, $cardcode]);
+
+            $lineas = [];
+            while ($row = odbc_fetch_object($stmt)) {
+                $lineas[] = [
+                    'centro_costo'  => $row->centro_costo ?? '',
+                    'cuenta'        => $row->cuenta ?? '',
+                    'nombre_cuenta' => $row->nombre_cuenta ?? '',
+                    'descripcion'   => $row->descripcion ?? '',
+                    'monto_linea'   => (float)($row->monto_linea ?? 0)
+                ];
+            }
+
+            // Datos generales de la orden (tomamos del primer registro)
+            $orden = !empty($lineas) ? [
+                'numero_oc'     => $row->numero_oc ?? '',
+                'fecha'         => $row->fecha ?? '',
+                'total'         => (float)($row->total ?? 0),
+                'observaciones' => $row->observaciones ?? ''
+            ] : [];
+
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            return ['orden' => $orden, 'lineas' => $lineas];
+
+        } catch (Exception $e) {
+            error_log("Error al obtener detalle de orden SAP: " . $e->getMessage());
+            return ['orden' => [], 'lineas' => []];
+        }
+    }
+    
 }

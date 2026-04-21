@@ -384,6 +384,8 @@ button:hover { background:#004d00; }
     margin-bottom: 30px;
 }
 
+
+
 .welcome-section h1 {
     margin: 0 0 8px 0;
     font-size: 1.8rem;
@@ -482,4 +484,19 @@ button:hover { background:#004d00; }
     padding: 30px;
     color: #777;
     font-style: italic;
+}
+
+
+.dashboard-container .Recordatorio {
+    background: linear-gradient(to right, #918e00, #a3a101);
+    color: white;
+    padding: 10px 5px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    width: max-content;
+}
+
+.dashboard-container .Recordatorio h2{
+    font-size: 1rem;
+    margin-bottom: 10px;
 }

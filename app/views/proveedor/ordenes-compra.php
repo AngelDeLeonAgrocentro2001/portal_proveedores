@@ -20,7 +20,7 @@
         <small>(<?= count($ordenes) ?> órdenes)</small>
     </div>
 
-    <table class="data-table">
+        <table class="data-table">
         <thead>
             <tr>
                 <th>N° Orden</th>
@@ -29,12 +29,13 @@
                 <th>Moneda</th>
                 <th>Estado</th>
                 <th>DocEntry SAP</th>
+                <th>Acciones</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($ordenes)): ?>
                 <tr>
-                    <td colspan="6" style="text-align:center; padding:40px;">
+                    <td colspan="7" style="text-align:center; padding:40px;">
                         No se encontraron órdenes de compra con este filtro.
                     </td>
                 </tr>
@@ -51,6 +52,12 @@
                         </span>
                     </td>
                     <td><?= $oc['docentry'] ?></td>
+                    <td>
+                        <a href="index.php?controller=proveedor&action=pdfOrdenCompra&docentry=<?= $oc['docentry'] ?>" 
+                           class="btn-small" target="_blank">
+                            📄 Imprimir PDF
+                        </a>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
