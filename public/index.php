@@ -14,9 +14,18 @@ require_once BASE_PATH . 'database/DatabasePortal.php';
 require_once BASE_PATH . 'database/DatabaseCajas.php';
 require_once BASE_PATH . 'database/DatabaseSAP.php';
 
-
+// ========== NUEVO CÓDIGO: Controladores permitidos ==========
+$allowed_controllers = ['auth', 'proveedor', 'admin'];
 $controller = $_GET['controller'] ?? 'auth';
-$action     = $_GET['action']     ?? 'login';
+
+// Validar que el controlador esté permitido
+if (!in_array($controller, $allowed_controllers)) {
+    $controller = 'auth';
+    $action = 'login'; // Redirigir a login si intentan acceder a controlador no permitido
+}
+// ============================================================
+
+$action = $_GET['action'] ?? 'login';  // ← Esta línea debe estar DESPUÉS de la validación
 
 $controllerFile = BASE_PATH . "app/controllers/" . ucfirst($controller) . "Controller.php";
 
@@ -34,3 +43,4 @@ if (file_exists($controllerFile)) {
 }
 
 echo "<h2 style='color:red;text-align:center;margin-top:100px;'>Error: Controlador o acción no encontrado </h2>";
+?>

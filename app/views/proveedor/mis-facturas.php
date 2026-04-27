@@ -23,6 +23,7 @@
                 <th>Fecha de Contraseña</th>
                 <th>Fecha Pago Esperada</th>
                 <th>Acciones</th>
+                <!-- <th>Gastos</th> -->
             </tr>
         </thead>
         <tbody>
@@ -34,41 +35,47 @@
                 </tr>
             <?php else: ?>
                 <?php foreach ($facturas as $f): ?>
-                <tr>
-                    <td><strong><?= htmlspecialchars($f['numero_factura']) ?></strong></td>
-                    <td><?= !empty($f['fecha_factura_sat']) ? date('d/m/Y', strtotime($f['fecha_factura_sat'])) : '—' ?></td>
-                    <td><?= date('d/m/Y', strtotime($f['fecha_emision'])) ?></td>
-                    <td>Q <?= number_format($f['monto'], 2) ?></td>
-                    <td>Q <?= number_format($f['monto_retencion'] ?? 0, 2) ?></td>
-                    <td><span class="status <?= $f['estado'] ?>"><?= ucfirst($f['estado']) ?></span></td>
-                    
-                    <!-- COLUMNA CONTRASEÑA + BOTÓN PDF -->
-                    <td>
-                        <?php if (!empty($f['contrasena_pago']) && $f['estado'] !== 'pagada'): ?>
-                            <strong style="color:#006400;"><?= htmlspecialchars($f['contrasena_pago']) ?></strong><br>
-                            <a href="index.php?controller=proveedor&action=pdfContraseña&id=<?= $f['id'] ?>" 
-                               class="btn-small" style="font-size:0.8rem; padding:4px 8px; margin-top:4px;" target="_blank">
-                                📄 Imprimir PDF
+                    <tr>
+                        <td><strong><?= htmlspecialchars($f['numero_factura']) ?></strong></td>
+                        <td><?= !empty($f['fecha_factura_sat']) ? date('d/m/Y', strtotime($f['fecha_factura_sat'])) : '—' ?></td>
+                        <td><?= date('d/m/Y', strtotime($f['fecha_emision'])) ?></td>
+                        <td>Q <?= number_format($f['monto'], 2) ?></td>
+                        <td>Q <?= number_format($f['monto_retencion'] ?? 0, 2) ?></td>
+                        <td><span class="status <?= $f['estado'] ?>"><?= ucfirst($f['estado']) ?></span></td>
+
+                        <!-- COLUMNA CONTRASEÑA + BOTÓN PDF -->
+                        <td>
+                            <?php if (!empty($f['contrasena_pago']) && $f['estado'] !== 'pagada'): ?>
+                                <strong style="color:#006400;"><?= htmlspecialchars($f['contrasena_pago']) ?></strong><br>
+                                <a href="index.php?controller=proveedor&action=pdfContraseña&id=<?= $f['id'] ?>"
+                                    class="btn-small" style="font-size:0.8rem; padding:4px 8px; margin-top:4px;" target="_blank">
+                                    📄 Imprimir PDF
+                                </a>
+                            <?php else: ?>
+                                —
+                            <?php endif; ?>
+                        </td>
+
+                        <!-- Fecha de Contraseña -->
+                        <td>
+                            <?= !empty($f['fecha_inicio_credito'])
+                                ? '<strong style="color:#006400;">' . date('d/m/Y', strtotime($f['fecha_inicio_credito'])) . '</strong>'
+                                : '—' ?>
+                        </td>
+
+                        <td><?= !empty($f['fecha_pago_esperada']) ? date('d/m/Y', strtotime($f['fecha_pago_esperada'])) : '—' ?></td>
+
+                        <!-- Acciones (archivos) -->
+                        <td>
+                            <a href="#" onclick="verArchivos(<?= $f['id'] ?>, '<?= htmlspecialchars($f['numero_factura']) ?>')" class="btn-small">Archivos</a>
+                        </td>
+                        <!-- <td>
+                            <a href="index.php?controller=proveedor&action=gestionarGastos&factura_id=<?= $f['id'] ?>"
+                                class="btn-small" style="background:#ff9800;">
+                                💰 Gastos Adicionales
                             </a>
-                        <?php else: ?>
-                            —
-                        <?php endif; ?>
-                    </td>
-
-                    <!-- Fecha de Contraseña -->
-                    <td>
-                        <?= !empty($f['fecha_inicio_credito']) 
-                            ? '<strong style="color:#006400;">' . date('d/m/Y', strtotime($f['fecha_inicio_credito'])) . '</strong>' 
-                            : '—' ?>
-                    </td>
-
-                    <td><?= !empty($f['fecha_pago_esperada']) ? date('d/m/Y', strtotime($f['fecha_pago_esperada'])) : '—' ?></td>
-                    
-                    <!-- Acciones (archivos) -->
-                    <td>
-                        <a href="#" onclick="verArchivos(<?= $f['id'] ?>, '<?= htmlspecialchars($f['numero_factura']) ?>')" class="btn-small">Archivos</a>
-                    </td>
-                </tr>
+                        </td> -->
+                    </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
         </tbody>
@@ -85,10 +92,10 @@
 </div>
 
 <script>
-function verArchivos(id, numeroFactura) {
-    document.getElementById('modalFacturaNum').textContent = numeroFactura;
-    
-    let html = `
+    function verArchivos(id, numeroFactura) {
+        document.getElementById('modalFacturaNum').textContent = numeroFactura;
+
+        let html = `
         <p><strong>Factura PDF:</strong> 
             <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=factura" target="_blank" class="btn-small">Descargar Factura</a>
         </p>
@@ -97,19 +104,19 @@ function verArchivos(id, numeroFactura) {
         </p>
     `;
 
-    if (true) {
-        html += `
+        if (true) {
+            html += `
             <p><strong>Constancia (si aplica):</strong> 
                 <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=constancia" target="_blank" class="btn-small">Descargar Constancia</a>
             </p>
         `;
+        }
+
+        document.getElementById('contenidoArchivos').innerHTML = html;
+        document.getElementById('modalArchivos').style.display = 'flex';
     }
 
-    document.getElementById('contenidoArchivos').innerHTML = html;
-    document.getElementById('modalArchivos').style.display = 'flex';
-}
-
-function cerrarModal() {
-    document.getElementById('modalArchivos').style.display = 'none';
-}
+    function cerrarModal() {
+        document.getElementById('modalArchivos').style.display = 'none';
+    }
 </script>

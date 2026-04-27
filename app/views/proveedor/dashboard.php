@@ -30,6 +30,10 @@ $mostrarResumen = in_array($rol, ['admin', 'consultas']);
             En caso de no ser lunes, la contraseña se tomará en cuenta el próximo lunes y solo se pagaran los dias viernes.
         </p>
     </div>
+    <a href="index.php?controller=proveedor&action=contacto" class="btn-action secondary">
+    <span class="btn-icon">💬</span>
+    Contacto y Soporte
+</a>
 
     <!-- Tarjetas de Resumen - SOLO para admin y consultas -->
     <?php if ($mostrarResumen): ?>
