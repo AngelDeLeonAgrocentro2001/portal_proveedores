@@ -20,7 +20,21 @@ class AuthController {
 
                 if ($user) {
                     $_SESSION['user'] = $user;
-                    header('Location: index.php?controller=proveedor&action=dashboard');
+                    
+                    // Redirigir según el rol del usuario
+                    if ($user['rol'] === 'supervisor_compras') {
+                        // Redirigir al panel de administración de compras
+                        header('Location: index.php?controller=admin&action=gestionarContraseñas');
+                    } elseif ($user['rol'] === 'supervisor_finanzas') {
+                        // Redirigir a panel de finanzas
+                        header('Location: index.php?controller=finanzas&action=dashboard');
+                    } elseif ($user['rol'] === 'contabilidad') {
+                        // Redirigir a panel de contabilidad
+                        header('Location: index.php?controller=contabilidad&action=dashboard');
+                    } else {
+                        // Proveedor normal
+                        header('Location: index.php?controller=proveedor&action=dashboard');
+                    }
                     exit;
                 } else {
                     $error = "Código de cliente, correo o contraseña incorrectos";

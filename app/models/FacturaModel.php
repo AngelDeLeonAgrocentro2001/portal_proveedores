@@ -9,7 +9,9 @@ class FacturaModel {
         $this->pdo = DatabasePortal::getInstance()->getPdo();
     }
 
-                            public function reportarFactura($post, $files, $cardcode) {
+                            // En app/models/FacturaModel.php - Método reportarFactura()
+
+public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
     $numero_factura = trim($post['numero_factura'] ?? '');
     $fecha_factura_sat = $post['fecha_emision'] ?? date('Y-m-d');
     $monto          = floatval($post['monto'] ?? 0);
@@ -29,11 +31,11 @@ class FacturaModel {
     }
 
     // Verificar duplicado
-    $stmt = $this->pdo->prepare("SELECT id FROM facturas WHERE cardcode = ? AND numero_factura = ?");
-    $stmt->execute([$cardcode, $numero_factura]);
-    if ($stmt->fetch()) {
-        return ['success' => false, 'message' => 'Esta factura ya fue reportada anteriormente'];
-    }
+    // $stmt = $this->pdo->prepare("SELECT id FROM facturas WHERE cardcode = ? AND numero_factura = ?");
+    // $stmt->execute([$cardcode, $numero_factura]);
+    // if ($stmt->fetch()) {
+    //     return ['success' => false, 'message' => 'Esta factura ya fue reportada anteriormente'];
+    // }
 
     $provModel = new ProveedorModel();
     $proveedorData = $provModel->getProveedorByCardcode($cardcode);
@@ -91,17 +93,18 @@ class FacturaModel {
     $monto_total = $monto + $monto_adicional_total;
     $es_doble_factura = !empty($facturas_adicionales);
 
-    // INSERT de factura principal
+    // INSERT de factura principal con id_usuario
     $stmt = $this->pdo->prepare("
         INSERT INTO facturas 
-        (cardcode, numero_factura, fecha_factura_sat, fecha_emision, monto, monto_retencion, 
+        (cardcode, id_usuario, numero_factura, fecha_factura_sat, fecha_emision, monto, monto_retencion, 
          contrasena_pago, fecha_pago_esperada, fecha_inicio_credito, pdf_factura, pdf_constancia, 
          viajes, estado, ordenes_relacionadas, es_doble_factura)
-        VALUES (?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, 'reportada', ?, ?)
+        VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, 'reportada', ?, ?)
     ");
 
     $stmt->execute([
         $cardcode,
+        $id_usuario,  // ← NUEVO: ID del usuario que reporta
         $numero_factura,
         $fecha_factura_sat,
         $monto_total,
@@ -118,9 +121,8 @@ class FacturaModel {
 
     $factura_id = $this->pdo->lastInsertId();
 
-    // Insertar facturas adicionales
+    // Insertar facturas adicionales (código existente...)
     foreach ($facturas_adicionales as $adicional) {
-        // Subir PDF si existe
         $pdf_adicional = null;
         if (isset($files['pdf_adicional_' . $adicional['temp_id']]) && 
             $files['pdf_adicional_' . $adicional['temp_id']]['error'] === UPLOAD_ERR_OK) {
@@ -144,7 +146,7 @@ class FacturaModel {
         ]);
     }
 
-    // Marcar DTEs como usados (principal)
+    // Marcar DTEs como usados (código existente...)
     if (!empty($numero_factura) && !empty($proveedorData['nit'])) {
         try {
             $dbCajas = DatabaseCajas::getInstance()->getPdo();
@@ -167,7 +169,6 @@ class FacturaModel {
         }
     }
 
-    // Marcar DTEs adicionales como usados
     foreach ($facturas_adicionales as $adicional) {
         try {
             $dbCajas = DatabaseCajas::getInstance()->getPdo();

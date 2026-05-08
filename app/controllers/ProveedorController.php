@@ -48,13 +48,14 @@ class ProveedorController {
     }
 
     // ====================== NUEVO: REPORTAR FACTURA ======================
-                                public function reportarFactura() {
+   public function reportarFactura() {
     if (!isset($_SESSION['user'])) {
         header('Location: index.php?controller=auth&action=login');
         exit;
     }
 
     $cardcode = $_SESSION['user']['cardcode'];
+    $id_usuario = $_SESSION['user']['id'] ?? null;  // ← Obtener ID del usuario
     $rol      = $_SESSION['user']['rol'] ?? 'crear_contrasenas';
     $error    = '';
     $success  = '';
@@ -93,7 +94,8 @@ class ProveedorController {
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $facturaModel = new FacturaModel();
-        $resultado = $facturaModel->reportarFactura($_POST, $_FILES, $cardcode);
+        // Pasar el id_usuario al método reportarFactura
+        $resultado = $facturaModel->reportarFactura($_POST, $_FILES, $cardcode, $id_usuario);
 
         if ($resultado['success']) {
             $_SESSION['last_report'] = [
