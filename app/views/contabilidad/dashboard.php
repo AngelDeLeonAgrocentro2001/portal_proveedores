@@ -1,8 +1,13 @@
 <?php
-// app/views/contabilidad/dashboard.php
+// app/views/contabilidad/dashboard.php - VERSIÓN CON ENLACE AL REPORTE
 ?>
 
-<h1>📋 Gestión de Pagos a Proveedores</h1>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1 style="margin: 0;">📋 Gestión de Pagos a Proveedores</h1>
+    <a href="?controller=contabilidad&action=reporteRespuestaPago" class="btn-reporte" style="background: #1a237e; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+        📊 Reporte Respuesta de Pago
+    </a>
+</div>
 
 <?php if (!empty($error)): ?>
     <div class="alert error"><?= htmlspecialchars($error) ?></div>
@@ -44,6 +49,31 @@
     </form>
 </div>
 
+<!-- Función helper para formatear fechas de forma segura -->
+<?php 
+function safeDateFormat($date, $format = 'd/m/Y') {
+    if (empty($date) || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
+        return '—';
+    }
+    $timestamp = strtotime($date);
+    if ($timestamp === false || $timestamp <= 0) {
+        return '—';
+    }
+    return date($format, $timestamp);
+}
+
+function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
+    if (empty($date) || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
+        return '—';
+    }
+    $timestamp = strtotime($date);
+    if ($timestamp === false || $timestamp <= 0) {
+        return '—';
+    }
+    return date($format, $timestamp);
+}
+?>
+
 <!-- Detalle de factura encontrada -->
 <?php if (isset($factura) && $factura): ?>
 <div class="factura-detalle" id="factura-detalle">
@@ -51,30 +81,31 @@
     <table style="width:100%">
         <tr>
             <td width="150"><strong>Proveedor:</strong></td>
-            <td><?= htmlspecialchars($factura['proveedor_nombre']) ?> (<?= htmlspecialchars($factura['cardcode']) ?>)</td>
+            <td><?= htmlspecialchars($factura['proveedor_nombre'] ?? 'N/A') ?> (<?= htmlspecialchars($factura['cardcode'] ?? 'N/A') ?>)</td>
         </tr>
         <tr>
             <td><strong>Factura:</strong></td>
-            <td><?= htmlspecialchars($factura['numero_factura']) ?></td>
+            <td><?= htmlspecialchars($factura['numero_factura'] ?? 'N/A') ?></td>
         </tr>
         <tr>
             <td><strong>Monto:</strong></td>
-            <td>Q <?= number_format($factura['monto'], 2) ?></td>
+            <td>Q <?= number_format($factura['monto'] ?? 0, 2) ?></td>
         </tr>
         <tr>
             <td><strong>Estado actual:</strong></td>
-            <td><span class="status <?= $factura['estado'] ?>"><?= ucfirst(str_replace('_', ' ', $factura['estado'])) ?></span></td>
+            <td><span class="status <?= $factura['estado'] ?? '' ?>"><?= ucfirst(str_replace('_', ' ', $factura['estado'] ?? 'desconocido')) ?></span></td>
         </tr>
         <?php if (!empty($factura['fecha_pago_propuesta'])): ?>
         <tr>
             <td><strong>Fecha Pago Propuesta:</strong></td>
-            <td><strong style="color: #00695c;"><?= date('d/m/Y', strtotime($factura['fecha_pago_propuesta'])) ?></strong></td>
+            <td><strong style="color: #00695c;"><?= safeDateFormat($factura['fecha_pago_propuesta']) ?></strong></td>
         </tr>
         <?php endif; ?>
-        <?php if ($factura['estado'] === 'en_sap'): ?>
+        
+        <?php if (($factura['estado'] ?? '') === 'en_sap'): ?>
         <tr>
             <td><strong>Fecha Envío SAP:</strong></td>
-            <td><?= date('d/m/Y H:i', strtotime($factura['fecha_envio_sap'])) ?> por <?= htmlspecialchars($factura['enviado_por']) ?></td>
+            <td><?= safeDateTimeFormat($factura['fecha_envio_sap'] ?? null) ?> por <?= htmlspecialchars($factura['enviado_por'] ?? 'N/A') ?></td>
         </tr>
         <?php if (!empty($factura['comprobante_sap'])): ?>
         <tr>
@@ -96,23 +127,70 @@
     <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
         <a href="index.php?controller=contabilidad&action=pdfContraseña&id=<?= $factura['id'] ?>" class="btn-small" target="_blank">📄 Ver Contraseña PDF</a>
         
-        <?php if ($factura['estado'] === 'aprobada_finanzas'): ?>
+        <?php if (($factura['estado'] ?? '') === 'aprobada_compras'): ?>
             <div style="display: flex; gap: 10px; margin-top: 20px;">
-        <button onclick="mostrarModalEnviarSAP(<?= $factura['id'] ?>)" class="btn-contabilidad">📤 Enviar a SAP</button>
-        <button onclick="mostrarModalRechazar(<?= $factura['id'] ?>)" class="btn-rechazar" style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">❌ Rechazar</button>
-    </div>
+                <button onclick="mostrarModalEnviarSAP(<?= $factura['id'] ?>)" class="btn-contabilidad">📤 Enviar a SAP</button>
+                <button onclick="mostrarModalRechazar(<?= $factura['id'] ?>)" class="btn-rechazar" style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">❌ Rechazar</button>
+            </div>
         <?php endif; ?>
-        
-        <?php if ($factura['estado'] === 'en_sap'): ?>
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-        <button onclick="mostrarModalRegistrarPago(<?= $factura['id'] ?>, '<?= htmlspecialchars($factura['numero_factura']) ?>', <?= $factura['monto'] ?>)" class="btn-pagar">💰 Registrar Pago</button>
-        <button onclick="mostrarModalRechazar(<?= $factura['id'] ?>)" class="btn-rechazar" style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">❌ Rechazar</button>
     </div>
+    
+    <!-- SECCIÓN DE RETENCIONES -->
+    <div style="margin-top: 20px; padding: 15px; background: #fef9e6; border-radius: 8px; border-left: 4px solid #ff9800;">
+        <h3 style="color: #e65100; margin-bottom: 15px;">📎 Documentos de Retención</h3>
+        
+        <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+            <!-- Retención IVA -->
+            <div style="flex: 1; min-width: 200px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="font-weight: bold;">💰 Retención IVA:</span>
+                    <?php if (!empty($factura['pdf_retencion_iva'])): ?>
+                        <a href="index.php?controller=contabilidad&action=descargarRetencionIVA&id=<?= $factura['id'] ?>" 
+                           class="btn-small" target="_blank" style="background: #ff9800; color: white;">
+                            📄 Ver PDF
+                        </a>
+                    <?php endif; ?>
+                </div>
+                <form method="POST" enctype="multipart/form-data" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <input type="hidden" name="factura_id" value="<?= $factura['id'] ?>">
+                    <input type="file" name="pdf_retencion_iva" accept=".pdf" style="flex: 1; padding: 5px;">
+                    <button type="submit" name="subir_retencion_iva" class="btn-small" style="background: #ff9800; color: white; border: none; padding: 6px 15px; border-radius: 5px; cursor: pointer;">
+                        📤 Subir IVA
+                    </button>
+                </form>
+                <small style="color: #666;">Solo PDF - La retención de IVA es opcional</small>
+            </div>
+            
+            <!-- Retención ISR -->
+            <div style="flex: 1; min-width: 200px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="font-weight: bold;">💰 Retención ISR:</span>
+                    <?php if (!empty($factura['pdf_retencion_isr'])): ?>
+                        <a href="index.php?controller=contabilidad&action=descargarRetencionISR&id=<?= $factura['id'] ?>" 
+                           class="btn-small" target="_blank" style="background: #ff9800; color: white;">
+                            📄 Ver PDF
+                        </a>
+                    <?php endif; ?>
+                </div>
+                <form method="POST" enctype="multipart/form-data" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <input type="hidden" name="factura_id" value="<?= $factura['id'] ?>">
+                    <input type="file" name="pdf_retencion_isr" accept=".pdf" style="flex: 1; padding: 5px;">
+                    <button type="submit" name="subir_retencion_isr" class="btn-small" style="background: #ff9800; color: white; border: none; padding: 6px 15px; border-radius: 5px; cursor: pointer;">
+                        📤 Subir ISR
+                    </button>
+                </form>
+                <small style="color: #666;">Solo PDF - La retención de ISR es opcional</small>
+            </div>
+        </div>
+        
+        <?php if (!empty($factura['fecha_subida_retenciones'])): ?>
+        <div style="margin-top: 10px; font-size: 0.75rem; color: #999;">
+            📅 Documentos subidos: <?= date('d/m/Y H:i', strtotime($factura['fecha_subida_retenciones'])) ?> por <?= htmlspecialchars($factura['usuario_retenciones'] ?? '') ?>
+        </div>
         <?php endif; ?>
     </div>
 </div>
 <?php endif; ?>
-
 
 <!-- Modal Rechazar Factura -->
 <div id="modalRechazar" class="modal">
@@ -142,7 +220,7 @@
     <table class="data-table">
         <thead>
             <tr>
-                <th>Fecha Aprobación</th>
+                <th>Fecha Aprobación Compras</th>
                 <th>Proveedor</th>
                 <th>Tipo</th>
                 <th>Factura</th>
@@ -159,22 +237,22 @@
             <?php else: ?>
                 <?php foreach ($facturas_pendientes_sap as $f): ?>
                 <tr>
-                    <td><?= date('d/m/Y', strtotime($f['fecha_aprobacion_finanzas'])) ?></td>
-                    <td><?= htmlspecialchars(substr($f['proveedor_nombre'], 0, 30)) ?></td>
+                    <td><?= safeDateFormat($f['fecha_aprobacion_compras'] ?? null) ?></td>
+                    <td><?= htmlspecialchars(substr($f['proveedor_nombre'] ?? '', 0, 30)) ?></td>
                     <td>
-                        <?php if ($f['tipo_proveedor'] === 'transporte'): ?>
+                        <?php if (($f['tipo_proveedor'] ?? '') === 'transporte'): ?>
                             <span class="badge-tipo tipo-transporte">🚚 Transporte</span>
-                        <?php elseif ($f['tipo_proveedor'] === 'material_empaque'): ?>
+                        <?php elseif (($f['tipo_proveedor'] ?? '') === 'material_empaque'): ?>
                             <span class="badge-tipo tipo-material">📦 Material</span>
                         <?php else: ?>
-                            <?= $f['tipo_proveedor'] ?>
+                            <?= $f['tipo_proveedor'] ?? 'Normal' ?>
                         <?php endif; ?>
                     </td>
-                    <td><strong><?= htmlspecialchars($f['numero_factura']) ?></strong></td>
-                    <td>Q <?= number_format($f['monto'], 2) ?></td>
-                    <td><strong><?= date('d/m/Y', strtotime($f['fecha_pago_propuesta'])) ?></strong></td>
+                    <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
+                    <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
+                    <td><strong><?= safeDateFormat($f['fecha_pago_propuesta'] ?? null) ?></strong></td>
                     <td>
-                        <a href="?controller=contabilidad&action=dashboard&buscar=<?= urlencode($f['numero_factura']) ?>" 
+                        <a href="?controller=contabilidad&action=dashboard&buscar=<?= urlencode($f['numero_factura'] ?? '') ?>" 
                            class="btn-small">Revisar</a>
                     </td>
                 </tr>
@@ -184,8 +262,8 @@
     </table>
 </div>
 
-<!-- Facturas Enviadas a SAP (Pendientes de Pago) -->
-<h2>📤 Facturas en SAP (Pendientes de Pago)</h2>
+<!-- Facturas Enviadas a SAP (Pendientes de autorización de Finanzas) -->
+<h2>📤 Facturas en SAP (Pendientes Autorización Finanzas)</h2>
 <div class="table-container">
     <table class="data-table">
         <thead>
@@ -202,27 +280,131 @@
         <tbody>
             <?php if (empty($facturas_en_sap)): ?>
                 <tr>
-                    <td colspan="7" style="text-align:center; padding:40px;">No hay facturas en SAP pendientes de pago</td>
+                    <td colspan="7" style="text-align:center; padding:40px;">No hay facturas en SAP pendientes de autorización</td>
                 </tr>
             <?php else: ?>
                 <?php foreach ($facturas_en_sap as $f): ?>
                 <tr>
-                    <td><?= date('d/m/Y', strtotime($f['fecha_envio_sap'])) ?></td>
-                    <td><?= htmlspecialchars(substr($f['proveedor_nombre'], 0, 30)) ?></td>
-                    <td><strong><?= htmlspecialchars($f['numero_factura']) ?></strong></td>
-                    <td>Q <?= number_format($f['monto'], 2) ?></td>
-                    <td><?= date('d/m/Y', strtotime($f['fecha_pago_propuesta'])) ?></td>
+                    <td><?= safeDateFormat($f['fecha_envio_sap'] ?? null) ?></td>
+                    <td><?= htmlspecialchars(substr($f['proveedor_nombre'] ?? '', 0, 30)) ?></td>
+                    <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
+                    <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
+                    <td><?= safeDateFormat($f['fecha_pago_propuesta'] ?? null) ?></td>
                     <td><?= htmlspecialchars($f['comprobante_sap'] ?? '—') ?></td>
                     <td>
-                        <a href="?controller=contabilidad&action=dashboard&buscar=<?= urlencode($f['numero_factura']) ?>" 
-                           class="btn-small">Registrar Pago</a>
+                        <a href="?controller=finanzas&action=dashboard&buscar=<?= urlencode($f['numero_factura'] ?? '') ?>" 
+                           class="btn-small">Ir a Finanzas</a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
         </tbody>
-    </tr>
+    </table>
 </div>
+
+<h2>💰 Facturas Aprobadas para Pago</h2>
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Fecha Aprobación Finanzas</th>
+                <th>Proveedor</th>
+                <th>Factura</th>
+                <th>Monto</th>
+                <th>Fecha Pago Propuesta</th>
+                <th>Semana Pago</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php 
+            // Obtener facturas en estado aprobado_para_pago
+            $facturas_aprobadas_pago = $this->getFacturasAprobadasPago();
+            ?>
+            <?php if (empty($facturas_aprobadas_pago)): ?>
+                <tr>
+                    <td colspan="7" style="text-align:center; padding:40px;">No hay facturas aprobadas para pago pendientes</td>
+                </tr>
+            <?php else: ?>
+                <?php foreach ($facturas_aprobadas_pago as $f): ?>
+                <tr>
+                    <td><?= safeDateFormat($f['fecha_aprobacion_finanzas'] ?? null) ?></td>
+                    <td><?= htmlspecialchars(substr($f['proveedor_nombre'] ?? '', 0, 30)) ?></td>
+                    <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
+                    <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
+                    <td><strong><?= safeDateFormat($f['fecha_pago_propuesta'] ?? null) ?></strong></td>
+                    <td>
+                        <?php
+                        $semana_pago = $f['semana_pago'] ?? '';
+                        switch ($semana_pago) {
+                            case 'este_viernes':
+                                echo '<span class="badge" style="background: #4caf50;">Este Viernes</span>';
+                                break;
+                            case 'proximo_viernes':
+                                echo '<span class="badge" style="background: #ff9800;">Próximo Viernes</span>';
+                                break;
+                            case 'fecha_personalizada':
+                                echo '<span class="badge" style="background: #2196f3;">Fecha Personalizada</span>';
+                                break;
+                            default:
+                                echo '<span class="badge" style="background: #9e9e9e;">' . htmlspecialchars($semana_pago) . '</span>';
+                        }
+                        ?>
+                    </td>
+                    <td>
+                        <button onclick="mostrarModalAprobarPago(<?= $f['id'] ?>, '<?= htmlspecialchars($f['numero_factura']) ?>', <?= $f['monto'] ?>)" 
+                                class="btn-aprobar-pago" style="background: #28a745; color: white; border: none; padding: 5px 12px; border-radius: 5px; cursor: pointer;">
+                            💰 Registrar Pago
+                        </button>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>
+
+<!-- Modal Aprobar Pago (Registrar Pago) -->
+<div id="modalAprobarPago" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="cerrarModal('modalAprobarPago')">&times;</span>
+        <h2>💰 Registrar Pago</h2>
+        <p>Confirme el registro del pago para esta factura.</p>
+        
+        <input type="hidden" id="pago_factura_id" value="">
+        
+        <div class="form-group">
+            <label>Factura:</label>
+            <input type="text" id="pago_factura_numero" class="form-control" readonly disabled style="background: #f5f5f5;">
+        </div>
+        
+        <div class="form-group">
+            <label>Monto a Pagar *:</label>
+            <input type="number" id="pago_monto" step="0.01" class="form-control" required style="padding: 8px; border-radius: 5px; border: 1px solid #ddd;">
+        </div>
+        
+        <div class="form-group">
+            <label>Fecha de Pago *:</label>
+            <input type="date" id="pago_fecha" value="<?= date('Y-m-d') ?>" class="form-control" required style="padding: 8px; border-radius: 5px; border: 1px solid #ddd;">
+        </div>
+        
+        <div class="form-group">
+            <label>Número de Comprobante *:</label>
+            <input type="text" id="pago_comprobante" class="form-control" required placeholder="Ej: TRANS-001, CHEQUE-123, PAGO-001" style="padding: 8px; border-radius: 5px; border: 1px solid #ddd;">
+        </div>
+        
+        <div class="form-group">
+            <label>Observaciones (opcional):</label>
+            <textarea id="pago_observaciones" rows="3" class="form-control" placeholder="Agrega algún comentario..."></textarea>
+        </div>
+        
+        <div style="margin-top:20px; text-align:right;">
+            <button type="button" class="btn-secondary" onclick="cerrarModal('modalAprobarPago')">Cancelar</button>
+            <button type="button" class="btn-aprobar-pago" onclick="confirmarAprobarPago()" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">✅ Confirmar Pago</button>
+        </div>
+    </div>
+</div>
+
 
 <!-- Facturas Pagadas Recientemente -->
 <h2>✅ Últimas Facturas Pagadas</h2>
@@ -246,13 +428,13 @@
             <?php else: ?>
                 <?php foreach ($facturas_pagadas as $f): ?>
                 <tr>
-                    <td><?= date('d/m/Y', strtotime($f['fecha_pago_real'])) ?></td>
-                    <td><?= htmlspecialchars(substr($f['proveedor_nombre'], 0, 30)) ?></td>
-                    <td><strong><?= htmlspecialchars($f['numero_factura']) ?></strong></td>
-                    <td>Q <?= number_format($f['monto'], 2) ?></td>
+                    <td><?= safeDateFormat($f['fecha_pago_real'] ?? null) ?></td>
+                    <td><?= htmlspecialchars(substr($f['proveedor_nombre'] ?? '', 0, 30)) ?></td>
+                    <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
+                    <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
                     <td><?= htmlspecialchars($f['numero_comprobante_pago'] ?? '—') ?></td>
                     <td>
-                        <a href="?controller=contabilidad&action=dashboard&buscar=<?= urlencode($f['numero_factura']) ?>" 
+                        <a href="?controller=contabilidad&action=dashboard&buscar=<?= urlencode($f['numero_factura'] ?? '') ?>" 
                            class="btn-small">Ver</a>
                     </td>
                 </tr>
@@ -288,43 +470,70 @@
     </div>
 </div>
 
-<!-- Modal Registrar Pago -->
-<div id="modalRegistrarPago" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="cerrarModal('modalRegistrarPago')">&times;</span>
-        <h2>💰 Registrar Pago</h2>
-        <p>Factura: <strong id="factura_numero"></strong></p>
-        
-        <input type="hidden" id="factura_id_pago" value="">
-        
-        <div class="form-group">
-            <label>Monto Pagado *:</label>
-            <input type="number" id="monto_pagado" step="0.01" class="form-control" required>
-        </div>
-        
-        <div class="form-group">
-            <label>Fecha de Pago *:</label>
-            <input type="date" id="fecha_pago" class="form-control" value="<?= date('Y-m-d') ?>" required>
-        </div>
-        
-        <div class="form-group">
-            <label>Número de Comprobante *:</label>
-            <input type="text" id="numero_comprobante" class="form-control" placeholder="Ej: TRANS-001, CHEQUE-123" required>
-        </div>
-        
-        <div class="form-group">
-            <label>Observaciones (opcional):</label>
-            <textarea id="observaciones_pago" rows="3" class="form-control" placeholder="Agrega algún comentario..."></textarea>
-        </div>
-        
-        <div style="margin-top:20px; text-align:right;">
-            <button type="button" class="btn-secondary" onclick="cerrarModal('modalRegistrarPago')">Cancelar</button>
-            <button type="button" class="btn-pagar" onclick="confirmarRegistrarPago()">💰 Confirmar Pago</button>
-        </div>
-    </div>
-</div>
-
 <script>
+    function mostrarModalAprobarPago(facturaId, facturaNumero, monto) {
+    document.getElementById('pago_factura_id').value = facturaId;
+    document.getElementById('pago_factura_numero').value = facturaNumero;
+    document.getElementById('pago_monto').value = monto;
+    document.getElementById('pago_fecha').value = new Date().toISOString().slice(0,10);
+    document.getElementById('pago_comprobante').value = '';
+    document.getElementById('pago_observaciones').value = '';
+    document.getElementById('modalAprobarPago').style.display = 'block';
+}
+
+function confirmarAprobarPago() {
+    const facturaId = document.getElementById('pago_factura_id').value;
+    const monto = document.getElementById('pago_monto').value;
+    const fecha = document.getElementById('pago_fecha').value;
+    const comprobante = document.getElementById('pago_comprobante').value.trim();
+    const observaciones = document.getElementById('pago_observaciones').value;
+    
+    if (!comprobante) {
+        alert('Debe ingresar el número de comprobante');
+        document.getElementById('pago_comprobante').focus();
+        return;
+    }
+    
+    if (monto <= 0) {
+        alert('Debe ingresar un monto válido');
+        return;
+    }
+    
+    if (!confirm('¿Confirmar el registro de pago para esta factura?\n\nComprobante: ' + comprobante + '\nMonto: Q ' + parseFloat(monto).toFixed(2))) {
+        return;
+    }
+    
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = '⏳ Procesando...';
+    btn.disabled = true;
+    
+    fetch('index.php?controller=contabilidad&action=aprobarPago', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `factura_id=${facturaId}&numero_comprobante=${encodeURIComponent(comprobante)}&fecha_pago=${fecha}&monto_pagado=${monto}&observaciones=${encodeURIComponent(observaciones)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ ' + data.message);
+            location.reload();
+        } else {
+            alert('❌ Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error de conexión');
+    })
+    .finally(() => {
+        btn.textContent = originalText;
+        btn.disabled = false;
+        cerrarModal('modalAprobarPago');
+    });
+}
 function mostrarModalRechazar(facturaId) {
     document.getElementById('factura_id_rechazar').value = facturaId;
     document.getElementById('motivo_rechazo').value = '';
@@ -369,123 +578,91 @@ function confirmarRechazar() {
     }
 }
 
-    function mostrarModalEnviarSAP(facturaId) {
-        document.getElementById('factura_id_sap').value = facturaId;
-        document.getElementById('comprobante_sap').value = '';
-        document.getElementById('observaciones_sap').value = '';
-        document.getElementById('modalEnviarSAP').style.display = 'block';
+function mostrarModalEnviarSAP(facturaId) {
+    document.getElementById('factura_id_sap').value = facturaId;
+    document.getElementById('comprobante_sap').value = '';
+    document.getElementById('observaciones_sap').value = '';
+    document.getElementById('modalEnviarSAP').style.display = 'block';
+}
+
+function confirmarEnviarSAP() {
+    const facturaId = document.getElementById('factura_id_sap').value;
+    const comprobante = document.getElementById('comprobante_sap').value;
+    const observaciones = document.getElementById('observaciones_sap').value;
+    
+    if (!confirm('¿Confirmar envío de esta factura a SAP?\n\nLa factura quedará registrada en el sistema SAP y pasará a autorización de Finanzas.')) {
+        return;
     }
     
-    function confirmarEnviarSAP() {
-        const facturaId = document.getElementById('factura_id_sap').value;
-        const comprobante = document.getElementById('comprobante_sap').value;
-        const observaciones = document.getElementById('observaciones_sap').value;
-        
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = window.location.href;
-        
-        const inputId = document.createElement('input');
-        inputId.type = 'hidden';
-        inputId.name = 'factura_id';
-        inputId.value = facturaId;
-        form.appendChild(inputId);
-        
-        const inputComprobante = document.createElement('input');
-        inputComprobante.type = 'hidden';
-        inputComprobante.name = 'comprobante_sap';
-        inputComprobante.value = comprobante;
-        form.appendChild(inputComprobante);
-        
-        const inputObservaciones = document.createElement('input');
-        inputObservaciones.type = 'hidden';
-        inputObservaciones.name = 'observaciones';
-        inputObservaciones.value = observaciones;
-        form.appendChild(inputObservaciones);
-        
-        const inputAction = document.createElement('input');
-        inputAction.type = 'hidden';
-        inputAction.name = 'enviar_sap';
-        inputAction.value = '1';
-        form.appendChild(inputAction);
-        
-        document.body.appendChild(form);
-        form.submit();
-    }
+    // Mostrar loading
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = '⏳ Enviando...';
+    btn.disabled = true;
     
-    function mostrarModalRegistrarPago(facturaId, facturaNumero, monto) {
-        document.getElementById('factura_id_pago').value = facturaId;
-        document.getElementById('factura_numero').textContent = facturaNumero;
-        document.getElementById('monto_pagado').value = monto;
-        document.getElementById('fecha_pago').value = new Date().toISOString().split('T')[0];
-        document.getElementById('numero_comprobante').value = '';
-        document.getElementById('observaciones_pago').value = '';
-        document.getElementById('modalRegistrarPago').style.display = 'block';
-    }
-    
-    function confirmarRegistrarPago() {
-        const facturaId = document.getElementById('factura_id_pago').value;
-        const montoPagado = document.getElementById('monto_pagado').value;
-        const fechaPago = document.getElementById('fecha_pago').value;
-        const numeroComprobante = document.getElementById('numero_comprobante').value;
-        const observaciones = document.getElementById('observaciones_pago').value;
-        
-        if (!numeroComprobante) {
-            alert('Debe ingresar el número de comprobante de pago');
-            return;
+    // Usar AJAX para enviar a SAP
+    fetch('index.php?controller=contabilidad&action=enviarSAP', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `factura_id=${facturaId}&comprobante_sap=${encodeURIComponent(comprobante)}&observaciones=${encodeURIComponent(observaciones)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ ' + data.message);
+            location.reload();
+        } else {
+            alert('❌ Error: ' + data.message);
         }
-        
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = window.location.href;
-        
-        const inputId = document.createElement('input');
-        inputId.type = 'hidden';
-        inputId.name = 'factura_id';
-        inputId.value = facturaId;
-        form.appendChild(inputId);
-        
-        const inputMonto = document.createElement('input');
-        inputMonto.type = 'hidden';
-        inputMonto.name = 'monto_pagado';
-        inputMonto.value = montoPagado;
-        form.appendChild(inputMonto);
-        
-        const inputFecha = document.createElement('input');
-        inputFecha.type = 'hidden';
-        inputFecha.name = 'fecha_pago';
-        inputFecha.value = fechaPago;
-        form.appendChild(inputFecha);
-        
-        const inputComprobante = document.createElement('input');
-        inputComprobante.type = 'hidden';
-        inputComprobante.name = 'numero_comprobante';
-        inputComprobante.value = numeroComprobante;
-        form.appendChild(inputComprobante);
-        
-        const inputObservaciones = document.createElement('input');
-        inputObservaciones.type = 'hidden';
-        inputObservaciones.name = 'observaciones';
-        inputObservaciones.value = observaciones;
-        form.appendChild(inputObservaciones);
-        
-        const inputAction = document.createElement('input');
-        inputAction.type = 'hidden';
-        inputAction.name = 'registrar_pago';
-        inputAction.value = '1';
-        form.appendChild(inputAction);
-        
-        document.body.appendChild(form);
-        form.submit();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error de conexión al enviar a SAP');
+    })
+    .finally(() => {
+        btn.textContent = originalText;
+        btn.disabled = false;
+        cerrarModal('modalEnviarSAP');
+    });
+}
+
+function cerrarModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
     }
-    
-    function cerrarModal(modalId) {
-        document.getElementById(modalId).style.display = 'none';
-    }
-    
-    window.onclick = function(event) {
-        if (event.target.classList.contains('modal')) {
-            event.target.style.display = 'none';
-        }
-    }
+}
 </script>
+
+<style>
+.btn-reporte {
+    transition: all 0.3s ease;
+}
+
+.btn-reporte:hover {
+    background: #0d1b5e !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.btn-aprobar-pago {
+    transition: all 0.3s ease;
+}
+.btn-aprobar-pago:hover {
+    background: #218838 !important;
+    transform: translateY(-1px);
+}
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 15px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    color: white;
+}
+</style>

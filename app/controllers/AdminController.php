@@ -275,7 +275,7 @@ public function getOrdenesDisponibles() {
     try {
         // Conectar a SAP
         $sap = new DatabaseSAP();
-        $conexion = $sap->CONEXION_HANA('GT_AGROCENTRO_2016');
+        $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
         
         $query = "
             SELECT 
@@ -283,7 +283,7 @@ public function getOrdenesDisponibles() {
                 \"DocNum\" as \"numero_oc\",
                 \"DocDate\" as \"fecha\",
                 \"DocTotal\" as \"monto\"
-            FROM \"GT_AGROCENTRO_2016\".OPOR 
+            FROM \"T_GT_AGROCENTRO_2016\".OPOR 
             WHERE \"CardCode\" = ?
               AND \"DocStatus\" = 'O'
             ORDER BY \"DocDate\" DESC
@@ -337,84 +337,86 @@ public function getOrdenesDisponibles() {
     
     // Cambiar orden de compra
     public function cambiarOrdenCompra() {
-        if (!$this->verificarAcceso()) {
-            echo json_encode(['success' => false, 'message' => 'Acceso no autorizado']);
-            exit;
-        }
-        
-        $factura_id = $_POST['factura_id'] ?? 0;
-        $nueva_orden = $_POST['nueva_orden'] ?? '';
-        $comentarios = $_POST['comentarios'] ?? '';
-        $usuario = $_SESSION['admin_agrosistemas_user'] ?? ($_SESSION['user']['username'] ?? 'compras');
-        
-        if (!$factura_id || empty($nueva_orden)) {
-            echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
-            exit;
-        }
-        
-        try {
-            $nuevasOrdenes = [$nueva_orden];
-            $ordenesJson = json_encode($nuevasOrdenes);
-            
-            $stmt = $this->pdo->prepare("
-                UPDATE facturas 
-                SET ordenes_relacionadas = ?,
-                    comentarios_compras = CONCAT(IFNULL(comentarios_compras, ''), '\n[', NOW(), '] ', ?, ' Cambio de OC a ', ?),
-                    estado = 'revision_compras'
-                WHERE id = ?
-            ");
-            
-            $comentarioLog = $usuario . " cambió orden a $nueva_orden. " . $comentarios;
-            
-            if ($stmt->execute([$ordenesJson, $usuario, $nueva_orden, $factura_id])) {
-                echo json_encode(['success' => true, 'message' => 'Orden cambiada exitosamente']);
-            } else {
-                echo json_encode(['success' => false, 'message' => 'Error al actualizar']);
-            }
-        } catch (Exception $e) {
-            error_log("Error en cambiarOrdenCompra: " . $e->getMessage());
-            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-        }
+    if (!$this->verificarAcceso()) {
+        echo json_encode(['success' => false, 'message' => 'Acceso no autorizado']);
         exit;
     }
     
-    // Aprobar factura (pasa a Finanzas)
-    public function aprobarFacturaCompras() {
-        if (!$this->verificarAcceso()) {
-            echo json_encode(['success' => false, 'message' => 'Acceso no autorizado']);
-            exit;
-        }
-        
-        $factura_id = $_POST['factura_id'] ?? 0;
-        $comentarios = $_POST['comentarios'] ?? '';
-        $usuario = $_SESSION['admin_agrosistemas_user'] ?? ($_SESSION['user']['username'] ?? 'compras');
-        
-        if (!$factura_id) {
-            echo json_encode(['success' => false, 'message' => 'ID de factura no válido']);
-            exit;
-        }
-        
-        try {
-            $stmt = $this->pdo->prepare("
-                UPDATE facturas 
-                SET estado = 'aprobada_compras',
-                    aprobado_por_compras = ?,
-                    fecha_aprobacion_compras = NOW(),
-                    comentarios_compras = CONCAT(IFNULL(comentarios_compras, ''), '\n[', NOW(), '] ', ?, ' Aprobada por Compras: ', ?)
-                WHERE id = ?
-            ");
-            
-            if ($stmt->execute([$usuario, $usuario, $comentarios, $factura_id])) {
-                echo json_encode(['success' => true, 'message' => 'Factura aprobada correctamente. Pasa a Finanzas.']);
-            } else {
-                echo json_encode(['success' => false, 'message' => 'Error al aprobar']);
-            }
-        } catch (Exception $e) {
-            error_log("Error en aprobarFacturaCompras: " . $e->getMessage());
-            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-        }
+    $factura_id = $_POST['factura_id'] ?? 0;
+    $nueva_orden = $_POST['nueva_orden'] ?? '';
+    $comentarios = $_POST['comentarios'] ?? '';
+    $usuario = $_SESSION['admin_agrosistemas_user'] ?? ($_SESSION['user']['username'] ?? 'compras');
+    
+    if (!$factura_id || empty($nueva_orden)) {
+        echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
         exit;
     }
+    
+    try {
+        $nuevasOrdenes = [$nueva_orden];
+        $ordenesJson = json_encode($nuevasOrdenes);
+        
+        $stmt = $this->pdo->prepare("
+            UPDATE facturas 
+            SET ordenes_relacionadas = ?,
+                comentarios_compras = CONCAT(IFNULL(comentarios_compras, ''), '\n[', NOW(), '] ', ?, ' Cambio de OC a ', ?),
+                estado = 'revision_compras'
+            WHERE id = ?
+        ");
+        
+        $comentarioLog = $usuario . " cambió orden a $nueva_orden. " . $comentarios;
+        
+        if ($stmt->execute([$ordenesJson, $usuario, $nueva_orden, $factura_id])) {
+            echo json_encode(['success' => true, 'message' => 'Orden cambiada exitosamente']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Error al actualizar']);
+        }
+    } catch (Exception $e) {
+        error_log("Error en cambiarOrdenCompra: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+    
+    // Aprobar factura (pasa a Finanzas)
+    public function aprobarFacturaCompras() {
+    if (!$this->verificarAcceso()) {
+        echo json_encode(['success' => false, 'message' => 'Acceso no autorizado']);
+        exit;
+    }
+    
+    $factura_id = $_POST['factura_id'] ?? 0;
+    $comentarios = $_POST['comentarios'] ?? '';
+    $usuario = $_SESSION['admin_agrosistemas_user'] ?? ($_SESSION['user']['username'] ?? 'compras');
+    
+    if (!$factura_id) {
+        echo json_encode(['success' => false, 'message' => 'ID de factura no válido']);
+        exit;
+    }
+    
+    try {
+        // Cambiar estado a 'aprobada_compras' (pasa a Contabilidad)
+        // NOTA: Ahora Contabilidad es quien envía a SAP, no Finanzas
+        $stmt = $this->pdo->prepare("
+            UPDATE facturas 
+            SET estado = 'aprobada_compras',
+                aprobado_por_compras = ?,
+                fecha_aprobacion_compras = NOW(),
+                comentarios_compras = CONCAT(IFNULL(comentarios_compras, ''), '\n[', NOW(), '] ', ?, ' Aprobada por Compras: ', ?)
+            WHERE id = ?
+        ");
+        
+        if ($stmt->execute([$usuario, $usuario, $comentarios, $factura_id])) {
+            echo json_encode(['success' => true, 'message' => 'Factura aprobada correctamente. Pasa a Contabilidad para registro en SAP.']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Error al aprobar']);
+        }
+    } catch (Exception $e) {
+        error_log("Error en aprobarFacturaCompras: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
     
     // Rechazar factura (anula contraseña)
     public function rechazarFacturaCompras() {

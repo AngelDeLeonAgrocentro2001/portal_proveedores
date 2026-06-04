@@ -573,7 +573,7 @@
         <div class="modal-content">
             <span class="close" onclick="cerrarModal('modalAprobar')">&times;</span>
             <h2>✅ Aprobar Factura</h2>
-            <p>¿Confirmas que esta factura es correcta y procede al área de Finanzas?</p>
+            <p>¿Confirmas que esta factura es correcta y procede al área de Contabilidad?</p>
             
             <div class="form-group">
                 <label>Comentarios (opcional):</label>
@@ -855,7 +855,7 @@
         async function aprobarFactura() {
             const comentarios = document.getElementById('comentariosAprobar').value;
             
-            if (!confirm('¿Confirmas que esta factura es correcta y pasa al área de Finanzas?')) {
+            if (!confirm('¿Confirmas que esta factura es correcta y pasa al área de Contabilidad?')) {
                 return;
             }
             
@@ -871,7 +871,7 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert('✅ Factura aprobada correctamente. Pasa al área de Finanzas.');
+                    alert('✅ Factura aprobada correctamente. Pasa al área de Contabilidad.');
                     location.reload();
                 } else {
                     alert('❌ Error: ' + data.message);

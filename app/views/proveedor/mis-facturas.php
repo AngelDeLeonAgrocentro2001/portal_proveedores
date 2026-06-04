@@ -4,10 +4,10 @@
     <!-- Filtros -->
     <div class="filters">
         <a href="?controller=proveedor&action=misFacturas" class="filter-btn <?= empty($estado) ? 'active' : '' ?>">Todas</a>
-        <a href="?controller=proveedor&action=misFacturas&estado=reportada" class="filter-btn <?= $estado === 'reportada' ? 'active' : '' ?>">Reportadas</a>
-        <a href="?controller=proveedor&action=misFacturas&estado=validada" class="filter-btn <?= $estado === 'validada' ? 'active' : '' ?>">Validadas</a>
-        <a href="?controller=proveedor&action=misFacturas&estado=en_sap" class="filter-btn <?= $estado === 'en_sap' ? 'active' : '' ?>">En SAP</a>
-        <a href="?controller=proveedor&action=misFacturas&estado=pagada" class="filter-btn <?= $estado === 'pagada' ? 'active' : '' ?>">Pagadas</a>
+        <a href="?controller=proveedor&action=misFacturas&estado=reportada" class="filter-btn <?= ($estado ?? '') === 'reportada' ? 'active' : '' ?>">Reportadas</a>
+        <a href="?controller=proveedor&action=misFacturas&estado=validada" class="filter-btn <?= ($estado ?? '') === 'validada' ? 'active' : '' ?>">Validadas</a>
+        <a href="?controller=proveedor&action=misFacturas&estado=en_sap" class="filter-btn <?= ($estado ?? '') === 'en_sap' ? 'active' : '' ?>">En SAP</a>
+        <a href="?controller=proveedor&action=misFacturas&estado=pagada" class="filter-btn <?= ($estado ?? '') === 'pagada' ? 'active' : '' ?>">Pagadas</a>
     </div>
 
     <table class="data-table">
@@ -23,13 +23,13 @@
                 <th>Fecha de Contraseña</th>
                 <th>Fecha Pago Esperada</th>
                 <th>Acciones</th>
-                <!-- <th>Gastos</th> -->
+                <th>Tracking</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($facturas)): ?>
                 <tr>
-                    <td colspan="10" style="text-align:center; padding:30px;">
+                    <td colspan="11" style="text-align:center; padding:30px;">
                         No se encontraron facturas con este filtro.
                     </td>
                 </tr>
@@ -69,20 +69,22 @@
                         <td>
                             <a href="#" onclick="verArchivos(<?= $f['id'] ?>, '<?= htmlspecialchars($f['numero_factura']) ?>')" class="btn-small">Archivos</a>
                         </td>
-                        <!-- <td>
-                            <a href="index.php?controller=proveedor&action=gestionarGastos&factura_id=<?= $f['id'] ?>"
-                                class="btn-small" style="background:#ff9800;">
-                                💰 Gastos Adicionales
+                        
+                        <!-- Tracking - CORREGIDO: usar $f['id'] en lugar de $factura['id'] -->
+                        <td>
+                            <a href="index.php?controller=proveedor&action=timelineFactura&id=<?= $f['id'] ?>"
+                                class="btn-tracking" style="background: #17a2b8; color:white; padding:5px 12px; border-radius:20px; text-decoration:none; font-size:0.8rem;">
+                                <i class="fas fa-chart-line"></i> Ver Tracking
                             </a>
-                        </td> -->
+                        </td>
                     </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
         </tbody>
-    </table>
+     </table>
 </div>
 
-<!-- Modal de archivos (se mantiene igual) -->
+<!-- Modal de archivos -->
 <div id="modalArchivos" class="modal" style="display:none;">
     <div class="modal-content">
         <span class="close" onclick="cerrarModal()">&times;</span>
@@ -102,15 +104,10 @@
         <p><strong>Orden de Compra PDF:</strong> 
             <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=orden" target="_blank" class="btn-small">Descargar Orden</a>
         </p>
-    `;
-
-        if (true) {
-            html += `
-            <p><strong>Constancia (si aplica):</strong> 
-                <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=constancia" target="_blank" class="btn-small">Descargar Constancia</a>
-            </p>
+        <p><strong>Constancia (si aplica):</strong> 
+            <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=constancia" target="_blank" class="btn-small">Descargar Constancia</a>
+        </p>
         `;
-        }
 
         document.getElementById('contenidoArchivos').innerHTML = html;
         document.getElementById('modalArchivos').style.display = 'flex';

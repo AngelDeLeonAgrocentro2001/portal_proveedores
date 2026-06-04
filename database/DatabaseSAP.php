@@ -3,7 +3,7 @@
 
 class DatabaseSAP {
 
-    public function CONEXION_HANA($db_name = 'GT_AGROCENTRO_2016') {
+    public function CONEXION_HANA($db_name = 'T_GT_AGROCENTRO_2016') {
         $driver = "HDBODBC";
         $servername = "192.168.1.9:30015";
         $username = "SAPDBA";

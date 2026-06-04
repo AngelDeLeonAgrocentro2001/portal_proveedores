@@ -67,7 +67,7 @@ class ProveedorModel {
     public function getOrdenesCompraByCardcode($cardcode, $estado = 'abierta') {
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
 
             $añoActual = date('Y');   // Toma el año actual automáticamente (2026)
 
@@ -82,7 +82,7 @@ class ProveedorModel {
                         WHEN T0.\"DocStatus\" = 'O' THEN 'abierta' 
                         ELSE 'cerrada' 
                     END AS \"estado\"
-                FROM \"GT_AGROCENTRO_2016\".OPOR T0 
+                FROM \"T_GT_AGROCENTRO_2016\".OPOR T0 
                 WHERE T0.\"CardCode\" = ?
                   AND YEAR(T0.\"DocDate\") = ?
             ";
