@@ -19,6 +19,9 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
     $ordenes_seleccionadas = $post['ordenes'] ?? [];
     $viajes         = trim($post['viajes'] ?? '');
     
+    // Viajes de transporte (NUEVO)
+    $viajes_transporte = isset($post['viajes_transporte']) ? trim($post['viajes_transporte']) : '';
+    
     // Facturas adicionales (JSON)
     $facturas_adicionales = isset($post['facturas_adicionales']) ? json_decode($post['facturas_adicionales'], true) : [];
 
@@ -93,18 +96,18 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
     $monto_total = $monto + $monto_adicional_total;
     $es_doble_factura = !empty($facturas_adicionales);
 
-    // INSERT de factura principal con id_usuario
+    // INSERT de factura principal con id_usuario y viajes_transporte
     $stmt = $this->pdo->prepare("
         INSERT INTO facturas 
         (cardcode, id_usuario, numero_factura, fecha_factura_sat, fecha_emision, monto, monto_retencion, 
          contrasena_pago, fecha_pago_esperada, fecha_inicio_credito, pdf_factura, pdf_constancia, 
-         viajes, estado, ordenes_relacionadas, es_doble_factura)
-        VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, 'reportada', ?, ?)
+         viajes, viajes_transporte_ids, estado, ordenes_relacionadas, es_doble_factura)
+        VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reportada', ?, ?)
     ");
 
     $stmt->execute([
         $cardcode,
-        $id_usuario,  // ← NUEVO: ID del usuario que reporta
+        $id_usuario,
         $numero_factura,
         $fecha_factura_sat,
         $monto_total,
@@ -115,13 +118,14 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
         $pdf_factura,
         $pdf_constancia,
         $viajes,
+        $viajes_transporte, // NUEVO: JSON con IDs de viajes
         $ordenes_json,
         $es_doble_factura ? 1 : 0
     ]);
 
     $factura_id = $this->pdo->lastInsertId();
 
-    // Insertar facturas adicionales (código existente...)
+    // Insertar facturas adicionales
     foreach ($facturas_adicionales as $adicional) {
         $pdf_adicional = null;
         if (isset($files['pdf_adicional_' . $adicional['temp_id']]) && 
@@ -146,7 +150,7 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
         ]);
     }
 
-    // Marcar DTEs como usados (código existente...)
+    // Marcar DTEs como usados
     if (!empty($numero_factura) && !empty($proveedorData['nit'])) {
         try {
             $dbCajas = DatabaseCajas::getInstance()->getPdo();
@@ -185,9 +189,59 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
         }
     }
 
+    // ====================== NUEVO: MARCAR VIAJES DE TRANSPORTE COMO PAGADOS ======================
+    $viajes_marcados = false;
+    $error_viajes = null;
+    
+    if (!empty($viajes_transporte) && $viajes_transporte !== '[]' && $viajes_transporte !== 'null') {
+        $tripIds = json_decode($viajes_transporte, true);
+        
+        if (is_array($tripIds) && count($tripIds) > 0) {
+            try {
+                require_once BASE_PATH . 'app/models/TransporteAPIModel.php';
+                $transporteAPI = new TransporteAPIModel();
+                
+                // Extraer serie y número de la factura
+                $partes = explode(' ', trim($numero_factura), 2);
+                $serie_factura = trim($partes[0] ?? '');
+                $numero_dte_factura = trim($partes[1] ?? $numero_factura);
+                
+                // Fecha en formato DDMMYYYY (ej: 25102026)
+                $fechaObj = new DateTime($fecha_factura_sat);
+                $fechaFormateada = $fechaObj->format('dmY');
+                
+                $resultadoMarcado = $transporteAPI->marcarViajesPagados(
+                    $cardcode,
+                    $tripIds,
+                    $fechaFormateada,
+                    $monto_total,
+                    $serie_factura,
+                    $numero_dte_factura
+                );
+                
+                if ($resultadoMarcado['success']) {
+                    $viajes_marcados = true;
+                    error_log("✅ Viajes marcados como pagados para factura {$factura_id}: " . implode(',', $tripIds));
+                } else {
+                    $error_viajes = $resultadoMarcado['message'] ?? 'Error desconocido';
+                    error_log("❌ Error al marcar viajes como pagados: " . $error_viajes);
+                }
+            } catch (Exception $e) {
+                $error_viajes = $e->getMessage();
+                error_log("❌ Excepción al marcar viajes: " . $e->getMessage());
+            }
+        }
+    }
+
     $mensaje_adicional = '';
     if ($es_doble_factura && count($facturas_adicionales) > 0) {
-        $mensaje_adicional = " Incluye " . count($facturas_adicionales) . " factura(s) adicional(es) por Q " . number_format($monto_adicional_total, 2);
+        $mensaje_adicional .= " Incluye " . count($facturas_adicionales) . " factura(s) adicional(es) por Q " . number_format($monto_adicional_total, 2);
+    }
+    
+    if ($viajes_marcados) {
+        $mensaje_adicional .= " ✅ " . count(json_decode($viajes_transporte, true)) . " viaje(s) marcado(s) como pagados en sistema de transporte.";
+    } elseif (!empty($viajes_transporte) && $viajes_transporte !== '[]' && $error_viajes) {
+        $mensaje_adicional .= " ⚠️ No se pudieron marcar los viajes: " . $error_viajes;
     }
 
     return [
@@ -195,7 +249,8 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
         'contrasena' => $contrasena,
         'esLunes' => $esLunes,
         'proximoLunes' => $proximoLunesStr,
-        'mensaje_adicional' => $mensaje_adicional
+        'mensaje_adicional' => $mensaje_adicional,
+        'viajes_marcados' => $viajes_marcados
     ];
 }
 

@@ -3,6 +3,7 @@
 require_once BASE_PATH . 'app/models/ProveedorModel.php';
 require_once BASE_PATH . 'app/models/FacturaModel.php';
 require_once BASE_PATH . 'app/models/UsuarioModel.php';
+require_once BASE_PATH . 'app/models/TransporteAPIModel.php';
 class ProveedorController
 {
 
@@ -141,7 +142,7 @@ class ProveedorController
                 $error = $resultado['message'] ?? 'Error al reportar la factura';
             }
         }
-
+$cardcode_js = $_SESSION['user']['cardcode'];
         require_once BASE_PATH . 'app/views/layout/header.php';
         require_once BASE_PATH . 'app/views/proveedor/reportar-factura.php';
         require_once BASE_PATH . 'app/views/layout/footer.php';
@@ -1283,4 +1284,21 @@ class ProveedorController
 
         return $comentarios;
     }
+
+    // Añadir este método para obtener viajes vía AJAX
+public function getViajesPendientesTransporte() {
+    if (!isset($_SESSION['user'])) {
+        echo json_encode(['success' => false, 'message' => 'Sesión no iniciada']);
+        exit;
+    }
+    
+    $cardcode = $_SESSION['user']['cardcode'];
+    
+    $transporteModel = new TransporteAPIModel();
+    $resultado = $transporteModel->getViajesPendientes($cardcode);
+    
+    header('Content-Type: application/json');
+    echo json_encode($resultado);
+    exit;
+}
 }

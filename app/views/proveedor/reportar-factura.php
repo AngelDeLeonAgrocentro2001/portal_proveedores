@@ -14,6 +14,8 @@
 
     <form method="POST" enctype="multipart/form-data" id="reportarForm">
 
+    <input type="hidden" name="cardcode" id="cardcode" value="<?= htmlspecialchars($cardcode_js ?? '') ?>">
+
         <!-- Indicador de doble factura (solo para proveedores autorizados) -->
         <?php if ($esDobleFactura): ?>
         <div class="form-group" style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
@@ -118,10 +120,36 @@
             <div id="ordenesSeleccionadasTexto" style="margin-top:8px; font-size:0.95rem; color:#006400;"></div>
         </div>
 
-        <div class="form-group">
-            <label>Viajes facturados (opcional)</label>
-            <input type="text" name="viajes" placeholder="Viaje 45, Viaje 46">
+        <!-- ==================== VIAJES DE TRANSPORTE (SOLO PARA TIPO TRANSPORTE) ==================== -->
+<?php if ($proveedor['tipo_proveedor'] === 'transporte'): ?>
+<div class="card" style="margin-top: 25px; border: 1px solid #17a2b8;">
+    <div class="card-header" style="background: #e3f2fd; padding: 12px; border-radius: 8px 8px 0 0;">
+        <h3 style="margin: 0; color: #0d47a1;">🚚 Viajes Facturados (Opcional)</h3>
+        <small>Selecciona los viajes que están incluidos en esta factura</small>
+    </div>
+    <div class="card-body" style="padding: 15px;">
+        <div id="viajes-transporte-container">
+            <button type="button" class="btn-secondary" onclick="cargarViajesTransporte()" style="margin-bottom: 15px;">
+                🔄 Cargar Viajes Pendientes
+            </button>
+            <div id="lista-viajes" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 6px; display: none;">
+                <!-- Aquí se cargarán los viajes vía AJAX -->
+            </div>
+            <div id="viajes-loading" style="display: none; text-align: center; padding: 20px;">
+                ⏳ Cargando viajes pendientes...
+            </div>
+            <div id="viajes-error" class="alert error" style="display: none;"></div>
         </div>
+        <input type="hidden" name="viajes_transporte" id="viajes_transporte_input" value="">
+
+        <!-- Panel de depuración (solo visible en desarrollo) -->
+<div id="debug-panel" style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 6px; font-family: monospace; font-size: 12px; display: none;">
+    <strong>📋 JSON a enviar:</strong>
+    <pre id="json-preview" style="margin: 5px 0; overflow-x: auto;"></pre>
+</div>
+    </div>
+</div>
+<?php endif; ?>
 
         <div class="form-group">
             <label>Factura PDF (SAT) *</label>
@@ -194,7 +222,212 @@
         </div>
     </div>
 </div>
+<script>
+// Mostrar panel de depuración si hay viajes seleccionados
+function actualizarPreviewJSON() {
+    const viajes = viajesSeleccionados;
+    const panel = document.getElementById('debug-panel');
+    const preview = document.getElementById('json-preview');
+    
+    if (viajes.length > 0) {
+        const numeroFactura = document.getElementById('numero_factura')?.value || '';
+        const monto = parseFloat(document.getElementById('monto')?.value || 0);
+        const fechaEmision = document.getElementById('fecha_emision')?.value || new Date().toISOString().split('T')[0];
+        const cardcode = document.getElementById('cardcode')?.value || '';
+        
+        const partes = numeroFactura.trim().split(' ', 2);
+        const serie = partes[0] || '';
+        const number = partes[1] || numeroFactura;
+        
+        const fechaObj = new Date(fechaEmision);
+        const fechaFormateada = fechaObj.getDate().toString().padStart(2, '0') + 
+                                (fechaObj.getMonth() + 1).toString().padStart(2, '0') + 
+                                fechaObj.getFullYear();
+        
+        const payload = {
+            CardCode: cardcode,
+            trip_ids: viajes,
+            Date: fechaFormateada,
+            total: monto,
+            serie: serie,
+            number: number
+        };
+        
+        preview.textContent = JSON.stringify(payload, null, 2);
+        panel.style.display = 'block';
+    } else {
+        panel.style.display = 'none';
+    }
+}
 
+// Sobrescribir actualizarViajesSeleccionados para incluir la preview
+const originalActualizar = actualizarViajesSeleccionados;
+actualizarViajesSeleccionados = function() {
+    originalActualizar();
+    actualizarPreviewJSON();
+};
+</script>
+<script>
+// Variables para viajes de transporte
+let viajesSeleccionados = [];
+
+// Función para actualizar viajes seleccionados
+function actualizarViajesSeleccionados() {
+    const checkboxes = document.querySelectorAll('.viaje-checkbox:checked');
+    viajesSeleccionados = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    document.getElementById('viajes_transporte_input').value = JSON.stringify(viajesSeleccionados);
+    
+    // Mostrar contador
+    const contador = document.getElementById('viajes-contador');
+    if (contador) {
+        contador.innerText = viajesSeleccionados.length;
+    }
+    
+    // Mostrar JSON en consola cada vez que se selecciona/deselecciona un viaje
+    if (viajesSeleccionados.length > 0) {
+        mostrarJsonEnConsola();
+    }
+}
+
+// Función para mostrar JSON en consola
+function mostrarJsonEnConsola() {
+    const numeroFactura = document.getElementById('numero_factura')?.value || '';
+    const monto = parseFloat(document.getElementById('monto')?.value || 0);
+    const fechaEmision = document.getElementById('fecha_emision')?.value || new Date().toISOString().split('T')[0];
+    const cardcode = document.getElementById('cardcode')?.value || '';
+    
+    // Parsear serie y número de la factura
+    const partes = numeroFactura.trim().split(' ', 2);
+    const serie = partes[0] || '';
+    const number = partes[1] || numeroFactura;
+    
+    // Formatear fecha a DDMMYYYY
+    const fechaObj = new Date(fechaEmision);
+    const fechaFormateada = fechaObj.getDate().toString().padStart(2, '0') + 
+                            (fechaObj.getMonth() + 1).toString().padStart(2, '0') + 
+                            fechaObj.getFullYear();
+    
+    const payload = {
+        CardCode: cardcode,
+        trip_ids: viajesSeleccionados,
+        Date: fechaFormateada,
+        total: monto,
+        serie: serie,
+        number: number
+    };
+    
+    console.log('📦 JSON que se enviará a la API de transporte:', JSON.stringify(payload, null, 2));
+}
+
+async function cargarViajesTransporte() {
+    const container = document.getElementById('lista-viajes');
+    const loading = document.getElementById('viajes-loading');
+    const errorDiv = document.getElementById('viajes-error');
+    
+    container.style.display = 'none';
+    loading.style.display = 'block';
+    errorDiv.style.display = 'none';
+    
+    try {
+        const response = await fetch('index.php?controller=proveedor&action=getViajesPendientesTransporte');
+        const data = await response.json();
+        
+        loading.style.display = 'none';
+        
+        if (!data.success) {
+            errorDiv.innerHTML = '❌ ' + (data.message || 'Error al cargar viajes');
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        if (!data.trips || data.trips.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #666;">📭 No hay viajes pendientes de pago para esta empresa.</p>';
+            container.style.display = 'block';
+            return;
+        }
+        
+        // Mostrar la lista de viajes con checkboxes
+        let html = '<div style="margin-bottom: 10px;">';
+        html += '<label><input type="checkbox" id="seleccionar-todos-viajes" onchange="seleccionarTodosViajes(this)"> <strong>Seleccionar todos</strong></label>';
+        html += '</div>';
+        html += '<div id="viajes-list">';
+        
+        data.trips.forEach(viaje => {
+            const fecha = new Date(viaje.DocDate).toLocaleDateString();
+            html += `
+                <label class="checkbox-label" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <input type="checkbox" class="viaje-checkbox" value="${viaje.id}" data-token="${viaje.token}" onchange="actualizarViajesSeleccionados()">
+                        <strong>Viaje #${viaje.id}</strong> - ${fecha}
+                        <br><small>Placa: ${viaje.vehicle_plate} | Peso: ${viaje.weight} TN | Conductor: ${viaje.name_driver || 'N/A'}</small>
+                    </div>
+                </label>
+            `;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+        container.style.display = 'block';
+        
+        // Restaurar selecciones previas si existen
+        if (viajesSeleccionados.length > 0) {
+            document.querySelectorAll('.viaje-checkbox').forEach(cb => {
+                if (viajesSeleccionados.includes(parseInt(cb.value))) {
+                    cb.checked = true;
+                }
+            });
+            actualizarViajesSeleccionados();
+        }
+        
+    } catch (error) {
+        loading.style.display = 'none';
+        errorDiv.innerHTML = '❌ Error de conexión: ' + error.message;
+        errorDiv.style.display = 'block';
+        console.error('Error:', error);
+    }
+}
+
+function seleccionarTodosViajes(checkbox) {
+    const checkboxes = document.querySelectorAll('.viaje-checkbox');
+    checkboxes.forEach(cb => cb.checked = checkbox.checked);
+    actualizarViajesSeleccionados();
+}
+
+// Interceptar el envío del formulario para mostrar JSON en consola AL GENERAR CONTRASEÑA
+const formReporte = document.getElementById('reportarForm');
+if (formReporte) {
+    formReporte.addEventListener('submit', function(e) {
+        if (viajesSeleccionados.length > 0) {
+            const numeroFactura = document.getElementById('numero_factura')?.value || '';
+            const monto = parseFloat(document.getElementById('monto')?.value || 0);
+            const fechaEmision = document.getElementById('fecha_emision')?.value || new Date().toISOString().split('T')[0];
+            const cardcode = document.getElementById('cardcode')?.value || '';
+            
+            const partes = numeroFactura.trim().split(' ', 2);
+            const serie = partes[0] || '';
+            const number = partes[1] || numeroFactura;
+            
+            const fechaObj = new Date(fechaEmision);
+            const fechaFormateada = fechaObj.getDate().toString().padStart(2, '0') + 
+                                    (fechaObj.getMonth() + 1).toString().padStart(2, '0') + 
+                                    fechaObj.getFullYear();
+            
+            const payload = {
+                CardCode: cardcode,
+                trip_ids: viajesSeleccionados,
+                Date: fechaFormateada,
+                total: monto,
+                serie: serie,
+                number: number
+            };
+            
+            console.log('🚀 AL GENERAR CONTRASEÑA - Enviando a API de transporte:', JSON.stringify(payload, null, 2));
+        }
+        // El formulario continúa su envío normal
+        return true;
+    });
+}
+</script>
 <script>
 let facturasAdicionales = [];
 let contadorTemp = 0;
