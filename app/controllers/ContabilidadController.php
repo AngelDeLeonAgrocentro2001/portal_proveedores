@@ -693,7 +693,7 @@ class ContabilidadController
 
         $pdf->Ln(10);
 
-        if (!empty($factura['fecha_pago_propuesta'])) {
+        if (!empty($factura['fecha_pago_esperada'])) {
             $pdf->SetFont('helvetica', 'B', 11);
             $pdf->Cell(0, 8, 'FECHA DE PAGO PROPUESTA: ' . date('d/m/Y', strtotime($factura['fecha_pago_propuesta'])), 0, 1, 'C');
             $pdf->Ln(5);
@@ -778,13 +778,13 @@ class ContabilidadController
 
             if (!empty($nitFactura) && !empty($serie) && !empty($numero_dte)) {
                 $stmtDte = $dbCajas->prepare("
-                SELECT nombre_emisor 
-                FROM dte 
-                WHERE nit_emisor = ? 
-                  AND serie = ? 
-                  AND numero_dte = ?
-                LIMIT 1
-            ");
+            SELECT nombre_emisor 
+            FROM dte 
+            WHERE nit_emisor = ? 
+              AND serie = ? 
+              AND numero_dte = ?
+            LIMIT 1
+        ");
                 $stmtDte->execute([$nitFactura, $serie, $numero_dte]);
                 $dteInfo = $stmtDte->fetch(PDO::FETCH_ASSOC);
 
@@ -803,6 +803,11 @@ class ContabilidadController
             $proveedor = $proveedorModel->getProveedorByCardcode($factura['cardcode']);
             $nombreEmisor = $proveedor['nombre'] ?? '';
             error_log("Nombre emisor no encontrado en dte, usando nombre de proveedores: $nombreEmisor");
+        } else {
+            // Cargar proveedor para tener acceso a la dirección
+            $proveedorModel = new ProveedorModel();
+            $proveedor = $proveedorModel->getProveedorByCardcode($factura['cardcode']);
+            error_log("Nombre emisor encontrado en dte: $nombreEmisor");
         }
 
         // Obtener órdenes de compra asociadas
@@ -870,7 +875,7 @@ class ContabilidadController
 
             $bpData = [
                 "CardCode" => $cardCode,
-                "CardName" => $nombreEmisor,  // ← Usar nombre_emisor de dte
+
                 "CardType" => "cSupplier",
                 "GroupCode" => 101,
                 "Currency" => "GTQ",
@@ -911,82 +916,106 @@ class ContabilidadController
             error_log("Business Partner $cardCode YA existe en SAP");
         }
 
-        // ========== CONSTRUIR EL PAYLOAD ==========
-$fechaActual = date('Y-m-d');
-$fechaVencimiento = date('Y-m-d', strtotime('+30 days'));
+        // ========== CONSTRUIR EL PAYLOAD (ADAPTADO A TU JSON) ==========
+        $fechaActual = date('Y-m-d');
+        $fechaVencimiento = date('Y-m-d', strtotime('+30 days'));
 
-$nitProveedor = $factura['nit'] ?? '';
-$esPequeñoContribuyente = false;
+        // Usar la fecha de la factura si existe
+        $docDate = !empty($factura['fecha_factura']) ? $factura['fecha_factura'] : $fechaActual;
+        $taxDate = $docDate;
+        $docDueDate = date('Y-m-d', strtotime($docDate . ' +30 days'));
 
-if (strlen($nitProveedor) <= 8 || substr($nitProveedor, 0, 1) == '1') {
-    $esPequeñoContribuyente = true;
-    error_log("NIT $nitProveedor es Pequeño Contribuyente, usando TaxCode EXE");
-}
+        $nitProveedor = $factura['nit'] ?? '';
+        $esPequeñoContribuyente = false;
 
-// ========== IMPORTANTE: Usar el monto de la factura, no el de la orden ==========
-$docTotal = (float)$factura['monto'];  // Monto real de la factura
-error_log("Monto de la factura: $docTotal");
+        if (strlen($nitProveedor) <= 8 || substr($nitProveedor, 0, 1) == '1') {
+            $esPequeñoContribuyente = true;
+            error_log("NIT $nitProveedor es Pequeño Contribuyente, usando TaxCode EXE");
+        }
 
-$documentLines = [];
-foreach ($lineasOrden as $index => $linea) {
-    $quantity = (float)$linea['Quantity'];
-    $lineTotal = (float)$linea['LineTotal'];
-    
-    // Si la línea tiene total, usar ese valor
-    if ($lineTotal <= 0 && $quantity > 0) {
-        // Si no hay total, distribuir el monto total proporcionalmente
-        // Por ahora solo hay una línea, usar el monto total de la factura
-        $pricePerUnit = $docTotal / $quantity;
-    } else {
-        $pricePerUnit = $lineTotal / $quantity;
-    }
-    
-    $taxCode = $esPequeñoContribuyente ? 'EXE' : ($linea['TaxCode'] ?? 'IVA');
-    
-    // Para dDocument_Service, usar SOLO PriceAfterVAT (sin Price)
-    $lineData = [
-        "LineNum" => $index,
-        "ItemDescription" => $linea['Description'],
-        "Quantity" => $quantity > 0 ? $quantity : 1,
-        "PriceAfterVAT" => $docTotal / ($quantity > 0 ? $quantity : 1),  // Solo PriceAfterVAT
-        "TaxCode" => $taxCode,
-        "AccountCode" => $linea['AccountCode'],
-        "CostingCode" => $linea['CostingCode'],
-        "CostingCode2" => $linea['CostingCode2'],
-        "CostingCode3" => $linea['CostingCode3'],
-        "BaseEntry" => (int)$docentry,
-        "BaseLine" => (int)$linea['BaseLine'],
-        "BaseType" => 22
-    ];
-    
-    // NO incluir 'Price' para evitar descuentos
-    
-    $documentLines[] = $lineData;
-}
+        // ========== IMPORTANTE: Usar el monto de la factura, no el de la orden ==========
+        $docTotal = (float)$factura['monto'];  // Monto real de la factura
+        error_log("Monto de la factura: $docTotal");
 
-$purchaseInvoice = [
-    "DocType" => "dDocument_Service",
-    "CardCode" => $cardCode,
-    "CardName" => $nombreEmisor,
-    "U_CODIGO" => $cardCode,
-    "DocDate" => $fechaActual,
-    "TaxDate" => $fechaActual,
-    "DocDueDate" => $fechaVencimiento,
-    "Comments" => "Factura: " . $factura['numero_factura'] . " - " . $observaciones,
-    "JournalMemo" => "Factura " . $factura['numero_factura'],
-    "U_NIT" => $nitProveedor,
-    "U_NOMBRE" => $nombreEmisor,
-    "U_DIRECCI" => $proveedor['direccion'] ?? '',
-    "Series" => 82,
-    "NumAtCard" => $factura['numero_factura'] . '-' . $factura_id,
-    "DocTotal" => $docTotal,
-    "DocCurrency" => "QTZ",
-    "DocRate" => 1,
-    "DocumentLines" => $documentLines
-];
+        // Calcular cantidad total de las órdenes
+        $totalQuantity = 0;
+        foreach ($lineasOrden as $linea) {
+            $totalQuantity += (float)$linea['Quantity'];
+        }
 
-        error_log("=== PAYLOAD ENVIADO A SAP ===");
+        // Si no hay cantidad, usar 1 por defecto
+        if ($totalQuantity <= 0) {
+            $totalQuantity = 1;
+        }
+
+        // Precio unitario basado en el total de la factura
+        $pricePerUnit = $docTotal / $totalQuantity;
+
+        $documentLines = [];
+        foreach ($lineasOrden as $index => $linea) {
+            $quantity = (float)$linea['Quantity'];
+            if ($quantity <= 0) $quantity = 1;
+
+            $taxCode = $esPequeñoContribuyente ? 'EXE' : ($linea['TaxCode'] ?? 'IVA');
+
+            // Construir línea según tu ejemplo (SOLO PriceAfterVAT, sin Price)
+            $lineData = [
+                "LineNum" => $index,
+                "ItemDescription" => $linea['Description'] ?? $linea['ItemDescription'] ?? 'Servicio',
+                "Quantity" => $quantity,
+                "PriceAfterVAT" => $pricePerUnit,  // Precio unitario basado en el total de la factura
+                "TaxCode" => $taxCode,
+                "U_TipoA" => "S",
+                "AccountCode" => $linea['AccountCode'] ?? '640901001',  // Cuenta por defecto como en tu ejemplo
+                "CostingCode" => $linea['CostingCode'] ?? 'D08',
+                "CostingCode2" => $linea['CostingCode2'] ?? '',
+                "CostingCode3" => $linea['CostingCode3'] ?? '',
+                "BaseEntry" => (int)$docentry,
+                "BaseLine" => (int)($linea['BaseLine'] ?? $index),
+                "BaseType" => 22,
+                "DiscountPercent" => 0  // Añadido como en tu ejemplo
+            ];
+
+            $documentLines[] = $lineData;
+        }
+
+        // Construir el payload FINAL según tu ejemplo
+        $purchaseInvoice = [
+            "DocType" => "dDocument_Service",
+            "CardCode" => $cardCode,
+            "U_CODIGO" => $cardCode,  // ← Como en tu ejemplo
+            "DocDate" => $docDate,
+            "TaxDate" => $taxDate,
+            "DocDueDate" => $docDueDate,
+            "Comments" => "Factura: {$factura['numero_factura']} - {$observaciones}",
+            "JournalMemo" => "Factura {$factura['numero_factura']}",
+            "U_NIT" => $nitProveedor,
+            "U_NOMBRE" => $nombreEmisor,
+            "U_DIRECCI" => $proveedor['direccion'] ?? 'Ciudad de Guatemala',  // Dirección por defecto
+            "Series" => 653,  // ← CAMBIADO a 653 según tu ejemplo (antes era 82)
+            "NumAtCard" => $factura['numero_factura'] . '-' . $factura_id,  // Formato como en ejemplo
+            "DocCurrency" => "QTZ",
+            "DocRate" => 1,
+            "DocumentLines" => $documentLines
+        ];
+
+        // NOTA: NO incluyas "DocTotal" en el payload para dDocument_Service
+        // SAP lo calcula automáticamente desde las líneas
+
+        // ========== MOSTRAR JSON EN CONSOLA SIN AFECTAR EL FLUJO ==========
+        error_log("=== JSON ENVIADO A SAP (EXACTO) ===");
         error_log(json_encode($purchaseInvoice, JSON_PRETTY_PRINT));
+        error_log("====================================");
+
+        // Guardar en archivo de log para depuración
+        $logDir = '/tmp/sap_logs/';
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0777, true);
+        }
+        file_put_contents(
+            $logDir . 'sap_payload_' . date('Y-m-d_H-i-s') . '_' . $factura_id . '.json',
+            json_encode($purchaseInvoice, JSON_PRETTY_PRINT)
+        );
 
         // ========== ENVIAR A SAP ==========
         $sapUrl = "https://192.168.1.9:50000/b1s/v1/PurchaseInvoices";
@@ -1042,19 +1071,19 @@ $purchaseInvoice = [
         $docNum = $sapResponse['DocNum'] ?? null;
 
         $stmt = $this->pdo->prepare("
-        UPDATE facturas 
-        SET estado = 'en_sap',
-            enviado_sap = 1,
-            fecha_envio_sap = NOW(),
-            fecha_envio_sap_confirmacion = NOW(),
-            enviado_por = ?,
-            comprobante_sap = ?,
-            doc_entry_sap = ?,
-            doc_num_sap = ?,
-            sap_response = ?,
-            observaciones_contabilidad = CONCAT(IFNULL(observaciones_contabilidad, ''), '\n[', NOW(), '] ', ?, ' Enviado a SAP: ', ?)
-        WHERE id = ?
-    ");
+    UPDATE facturas 
+    SET estado = 'en_sap',
+        enviado_sap = 1,
+        fecha_envio_sap = NOW(),
+        fecha_envio_sap_confirmacion = NOW(),
+        enviado_por = ?,
+        comprobante_sap = ?,
+        doc_entry_sap = ?,
+        doc_num_sap = ?,
+        sap_response = ?,
+        observaciones_contabilidad = CONCAT(IFNULL(observaciones_contabilidad, ''), '\n[', NOW(), '] ', ?, ' Enviado a SAP: ', ?)
+    WHERE id = ?
+");
 
         $sapResponseJson = json_encode($sapResponse);
 
@@ -1072,12 +1101,14 @@ $purchaseInvoice = [
                 'success' => true,
                 'message' => 'Factura enviada a SAP correctamente. Documento SAP #' . $docNum,
                 'docEntry' => $docEntry,
-                'docNum' => $docNum
+                'docNum' => $docNum,
+                'payload' => $purchaseInvoice
             ]);
         } else {
             echo json_encode([
                 'success' => false,
-                'message' => 'Factura creada en SAP pero hubo error al actualizar el registro local'
+                'message' => 'Factura creada en SAP pero hubo error al actualizar el registro local',
+                'payload' => $purchaseInvoice
             ]);
         }
         exit;
@@ -1828,6 +1859,7 @@ $purchaseInvoice = [
             f.id,
             f.numero_factura,
             f.monto,
+            f.fecha_pago_esperada,
             f.fecha_pago_propuesta,
             f.fecha_pago_real,
             f.fecha_aprobacion_finanzas,
@@ -1843,7 +1875,7 @@ $purchaseInvoice = [
         JOIN proveedores p ON f.cardcode = p.cardcode
         WHERE f.estado IN ('aprobado_para_pago', 'confirmacion_pago', 'pagada')
             AND f.fecha_aprobacion_finanzas IS NOT NULL
-            AND DATE(f.fecha_aprobacion_finanzas) BETWEEN ? AND ?
+            AND f.fecha_pago_esperada BETWEEN ? AND ?
         ORDER BY f.fecha_aprobacion_finanzas DESC
     ");
 
@@ -1881,6 +1913,7 @@ $purchaseInvoice = [
             f.id,
             f.numero_factura,
             f.monto,
+            f.fecha_pago_esperada as fecha_original_esperada,
             f.fecha_pago_propuesta as fecha_actual,
             f.fecha_pago_propuesta_original,
             f.fecha_pago_propuesta_anterior,
@@ -1899,7 +1932,7 @@ $purchaseInvoice = [
                 f.comentarios_finanzas LIKE '%Cambió fecha de pago%'
                 OR f.semana_pago = 'fecha_personalizada'
             )
-            AND DATE(f.fecha_aprobacion_finanzas) BETWEEN ? AND ?
+            AND f.fecha_pago_esperada BETWEEN ? AND ?
         ORDER BY f.fecha_aprobacion_finanzas DESC
     ");
 
@@ -1910,19 +1943,15 @@ $purchaseInvoice = [
         foreach ($facturas as &$factura) {
             $comentarios = $factura['comentarios_finanzas'] ?? '';
 
-            // Inicializar valores
             $factura['nueva_fecha'] = null;
             $factura['fecha_anterior'] = null;
             $factura['motivo'] = 'No especificado';
 
-            // Para facturas con fecha personalizada sin historial de cambios
-            if (empty($factura['fecha_pago_propuesta_original']) && $factura['semana_pago'] === 'fecha_personalizada') {
-                // Esta es una fecha personalizada, usar la fecha actual como nueva
-                $factura['nueva_fecha'] = $factura['fecha_actual'];
-                $factura['fecha_anterior'] = null;  // ← IMPORTANTE: usar null, no un string
-                $factura['motivo'] = 'Fecha personalizada seleccionada';
-            } else {
-                // Buscar el último cambio de fecha en los comentarios
+            // La fecha original siempre es fecha_pago_esperada
+            $fecha_esperada = $factura['fecha_original_esperada'] ?? null;
+
+            if ($factura['semana_pago'] === 'fecha_personalizada' || strpos($comentarios, 'Cambió fecha de pago') !== false) {
+                // Buscar nueva fecha en comentarios
                 $patron = '/Cambió fecha de pago a (\d{4}-\d{2}-\d{2}) Motivo: (.*?)(?=\n|$)/';
                 preg_match_all($patron, $comentarios, $matches, PREG_SET_ORDER);
 
@@ -1930,22 +1959,15 @@ $purchaseInvoice = [
                     $ultimo_cambio = end($matches);
                     $factura['nueva_fecha'] = $ultimo_cambio[1];
                     $factura['motivo'] = trim($ultimo_cambio[2]);
-
-                    // Buscar fecha anterior (si existe)
-                    if (count($matches) > 1) {
-                        $anterior = $matches[count($matches) - 2];
-                        $factura['fecha_anterior'] = $anterior[1];
-                    } else {
-                        $factura['fecha_anterior'] = $factura['fecha_pago_propuesta_original'] ?? null;
-                    }
                 } else {
                     $factura['nueva_fecha'] = $factura['fecha_actual'];
-                    $factura['fecha_anterior'] = $factura['fecha_pago_propuesta_original'] ?? null;
-                    $factura['motivo'] = 'Fecha personalizada (sin historial)';
+                    $factura['motivo'] = 'Fecha personalizada';
                 }
+
+                // Fecha anterior siempre es la fecha_pago_esperada original
+                $factura['fecha_anterior'] = $fecha_esperada;
             }
 
-            // Agregar etiqueta de estado
             switch ($factura['estado']) {
                 case 'aprobado_para_pago':
                     $factura['tipo_aprobacion'] = '✅ Aprobado para Pago';
@@ -2052,7 +2074,7 @@ $purchaseInvoice = [
             exit;
         }
 
-        if ($factura['estado'] !== 'aprobado_para_pago') {
+        if (!in_array($factura['estado'], ['aprobado_para_pago', 'confirmacion_pago'])) {
             echo json_encode(['success' => false, 'message' => 'La factura no está en estado aprobado para pago']);
             exit;
         }
@@ -2062,24 +2084,22 @@ $purchaseInvoice = [
         try {
             // Actualizar factura como pagada
             $stmt = $this->pdo->prepare("
-            UPDATE facturas 
-            SET estado = 'pagada',
-                pagado = 1,
-                fecha_pago_real = ?,
-                numero_comprobante_pago = ?,
-                monto_pagado = ?,
-                observaciones_contabilidad = CONCAT(IFNULL(observaciones_contabilidad, ''), '\n[', NOW(), '] ', ?, ' PAGADO - Comprobante: ', ?, ' Monto: ', ?)
-            WHERE id = ?
-        ");
-
-            $stmt->execute([$fecha_pago, $numero_comprobante, $monto_pagado, $usuario, $numero_comprobante, $monto_pagado, $factura_id]);
+    UPDATE facturas 
+    SET estado = 'pagada',
+        pagado = 1,
+        fecha_pago_real = ?,
+        numero_comprobante_pago = ?,
+        observaciones_contabilidad = CONCAT(IFNULL(observaciones_contabilidad, ''), '\n[', NOW(), '] ', ?, ' PAGADO - Comprobante: ', ?, ' Monto: ', ?)
+    WHERE id = ?
+");
+            $stmt->execute([$fecha_pago, $numero_comprobante, $usuario, $numero_comprobante, $monto_pagado, $factura_id]);
 
             // Registrar en tabla de pagos
             $stmtPago = $this->pdo->prepare("
-            INSERT INTO pagos (factura_id, fecha_pago, monto_pagado, detalle, registrado_por, numero_comprobante)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ");
-            $stmtPago->execute([$factura_id, $fecha_pago, $monto_pagado, $observaciones, $usuario, $numero_comprobante]);
+    INSERT INTO pagos (factura_id, fecha_pago, monto_pagado, detalle)
+    VALUES (?, ?, ?, ?)
+");
+            $stmtPago->execute([$factura_id, $fecha_pago, $monto_pagado, $observaciones]);
 
             $this->pdo->commit();
 
@@ -2101,7 +2121,7 @@ $purchaseInvoice = [
         SELECT f.*, p.nombre as proveedor_nombre, p.cardcode, p.tipo_proveedor
         FROM facturas f
         JOIN proveedores p ON f.cardcode = p.cardcode
-        WHERE f.estado = 'aprobado_para_pago'
+        WHERE f.estado IN ('aprobado_para_pago', 'confirmacion_pago')
         ORDER BY f.fecha_aprobacion_finanzas ASC
         LIMIT 50
     ");

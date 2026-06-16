@@ -100,8 +100,8 @@ function safeDateFormat($date, $format = 'd/m/Y')
                 <td><span class="status <?= $factura['estado'] ?? '' ?>"><?= ucfirst(str_replace('_', ' ', $factura['estado'] ?? 'desconocido')) ?></span></td>
             </tr>
             <tr>
-                <td><strong>Fecha Pago Propuesta:</strong></td>
-                <td><strong style="color: #1a237e;"><?= safeDateFormat($factura['fecha_pago_propuesta'] ?? null) ?></strong></td>
+                <td><strong>Fecha de Pago:</strong></td>
+                <td><strong style="color: #1a237e;"><?= safeDateFormat($factura['fecha_pago_esperada'] ?? null) ?></strong></td>
             </tr>
         </table>
 
@@ -126,9 +126,25 @@ function safeDateFormat($date, $format = 'd/m/Y')
                     <div class="form-group" style="margin-bottom: 15px;">
                         <label style="font-weight: bold;">Seleccionar fecha de pago *:</label>
                         <select name="semana_pago" id="semana_pago" onchange="toggleFechaCustom()" required style="padding: 10px; margin-left: 10px; border-radius: 5px; border: 1px solid #ccc;">
-                            <option value="">-- Seleccionar --</option>
-                            <option value="este_viernes">✅ Este Viernes (<?= date('d/m/Y', strtotime('this friday')) ?>)</option>
-                            <option value="proximo_viernes">📅 Próximo Viernes (<?= date('d/m/Y', strtotime('next friday')) ?>)</option>
+                            <?php
+                            $fecha_esperada = $factura['fecha_pago_esperada'] ?? null;
+                            // Viernes de la semana de fecha_pago_esperada
+                            if ($fecha_esperada) {
+                                $ts = strtotime($fecha_esperada);
+                                $diaSemana = (int)date('N', $ts); // 1=Lun ... 5=Vie ... 7=Dom
+                                $diasHastaViernes = (5 - $diaSemana + 7) % 7; // 0 si ya es viernes
+                                $este_viernes_ts = strtotime("+{$diasHastaViernes} days", $ts);
+                                $proximo_viernes_ts = strtotime('+7 days', $este_viernes_ts);
+                            } else {
+                                $este_viernes_ts = strtotime('this friday');
+                                $proximo_viernes_ts = strtotime('next friday');
+                            }
+                            $este_viernes_str   = date('d/m/Y', $este_viernes_ts);
+                            $proximo_viernes_str = date('d/m/Y', $proximo_viernes_ts);
+                            $fecha_min_custom   = $fecha_esperada ? date('Y-m-d', $este_viernes_ts) : date('Y-m-d');
+                            ?>
+                            <option value="este_viernes">✅ Este Viernes (<?= $este_viernes_str ?>)</option>
+                            <option value="proximo_viernes">📅 Próximo Viernes (<?= $proximo_viernes_str ?>)</option>
                             <option value="custom">📅 Fecha Personalizada</option>
                         </select>
                     </div>
@@ -170,7 +186,7 @@ function safeDateFormat($date, $format = 'd/m/Y')
     <table class="data-table">
         <thead>
             <tr>
-                <th>Fecha Pago Propuesta</th>
+                <th>Fecha de Pago</th>
                 <th>Semana</th>
                 <th>Proveedor</th>
                 <th>Tipo</th>
@@ -187,7 +203,7 @@ function safeDateFormat($date, $format = 'd/m/Y')
             <?php else: ?>
                 <?php foreach ($facturas_pendientes as $f): ?>
                     <tr style="<?= (!empty($f['fecha_pago_propuesta']) && strtotime($f['fecha_pago_propuesta']) < strtotime(date('Y-m-d'))) ? 'background: #ffebee;' : '' ?>">
-                        <td><strong><?= safeDateFormat($f['fecha_pago_propuesta'] ?? null) ?></strong></td>
+                        <td><strong><?= safeDateFormat($f['fecha_pago_esperada'] ?? null) ?></strong></td>
                         <td>
                             <?php if ($f['esta_semana'] ?? false): ?>
                                 <span class="badge-semana" style="background: #4caf50; color: white; padding: 3px 10px; border-radius: 15px; font-size: 0.7rem;">📅 Esta Semana</span>
@@ -280,41 +296,41 @@ function safeDateFormat($date, $format = 'd/m/Y')
     });
 
     // Restringir fecha personalizada solo a viernes (día 5)
-document.addEventListener('DOMContentLoaded', function() {
-    const inputFecha = document.getElementById('fecha_pago_custom');
-    if (!inputFecha) return;
+    document.addEventListener('DOMContentLoaded', function() {
+        const inputFecha = document.getElementById('fecha_pago_custom');
+        if (!inputFecha) return;
 
-    // Establecer fecha mínima como hoy
-    const hoy = new Date();
-    inputFecha.min = hoy.toISOString().split('T')[0];
+        // Establecer fecha mínima como hoy
+        const hoy = new Date();
+        inputFecha.min = '<?= $fecha_min_custom ?? date('Y-m-d') ?>';
 
-    inputFecha.addEventListener('change', function() {
-        const fechaSeleccionada = new Date(this.value + 'T00:00:00');
-        const diaSemana = fechaSeleccionada.getDay(); // 0=Dom, 5=Vie
+        inputFecha.addEventListener('change', function() {
+            const fechaSeleccionada = new Date(this.value + 'T00:00:00');
+            const diaSemana = fechaSeleccionada.getDay(); // 0=Dom, 5=Vie
 
-        if (diaSemana !== 5) {
-            alert('⚠️ Solo puede seleccionar viernes como fecha de pago.');
-            this.value = '';
-        }
+            if (diaSemana !== 5) {
+                alert('⚠️ Solo puede seleccionar viernes como fecha de pago.');
+                this.value = '';
+            }
+        });
+
+        // Resaltar visualmente que solo viernes son válidos
+        inputFecha.addEventListener('input', function() {
+            const fechaSeleccionada = new Date(this.value + 'T00:00:00');
+            const diaSemana = fechaSeleccionada.getDay();
+
+            if (this.value && diaSemana !== 5) {
+                this.style.borderColor = '#dc3545';
+                this.style.background = '#ffebee';
+            } else if (this.value) {
+                this.style.borderColor = '#28a745';
+                this.style.background = '#e8f5e9';
+            } else {
+                this.style.borderColor = '#ccc';
+                this.style.background = 'white';
+            }
+        });
     });
-
-    // Resaltar visualmente que solo viernes son válidos
-    inputFecha.addEventListener('input', function() {
-        const fechaSeleccionada = new Date(this.value + 'T00:00:00');
-        const diaSemana = fechaSeleccionada.getDay();
-
-        if (this.value && diaSemana !== 5) {
-            this.style.borderColor = '#dc3545';
-            this.style.background = '#ffebee';
-        } else if (this.value) {
-            this.style.borderColor = '#28a745';
-            this.style.background = '#e8f5e9';
-        } else {
-            this.style.borderColor = '#ccc';
-            this.style.background = 'white';
-        }
-    });
-});
 </script>
 
 <style>

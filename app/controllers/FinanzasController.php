@@ -261,13 +261,13 @@ class FinanzasController
         ";
 
         if ($filtro_semana === 'actual') {
-            $sql .= " AND f.fecha_pago_propuesta BETWEEN :inicio AND :fin";
+            $sql .= " AND f.fecha_pago_esperada BETWEEN :inicio AND :fin";
             $params = [
                 ':inicio' => $inicio_semana->format('Y-m-d'),
                 ':fin' => $fin_semana->format('Y-m-d')
             ];
         } elseif ($filtro_semana === 'proxima') {
-            $sql .= " AND f.fecha_pago_propuesta BETWEEN :inicio AND :fin";
+            $sql .= " AND f.fecha_pago_esperada BETWEEN :inicio AND :fin";
             $params = [
                 ':inicio' => $proxima_inicio->format('Y-m-d'),
                 ':fin' => $proxima_fin->format('Y-m-d')
@@ -283,7 +283,7 @@ class FinanzasController
         $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($resultados as &$f) {
-            $fecha_pago = $f['fecha_pago_propuesta'] ?? null;
+            $fecha_pago = $f['fecha_pago_esperada'] ?? null;
             if ($fecha_pago) {
                 $fecha_obj = new DateTime($fecha_pago);
                 $f['esta_semana'] = ($fecha_obj >= $inicio_semana && $fecha_obj <= $fin_semana);
@@ -316,16 +316,16 @@ class FinanzasController
         $proxima_fin->modify('+7 days');
 
         $stmt = $this->pdo->prepare("
-            SELECT 
-                COUNT(CASE WHEN fecha_pago_propuesta BETWEEN :semana_actual_inicio AND :semana_actual_fin THEN 1 END) as esta_semana,
-                COUNT(CASE WHEN fecha_pago_propuesta BETWEEN :proxima_semana_inicio AND :proxima_semana_fin THEN 1 END) as proxima_semana,
-                COUNT(CASE WHEN fecha_pago_propuesta < :semana_actual_inicio AND estado IN ('en_sap', 'confirmacion_pago') THEN 1 END) as atrasadas,
-                COUNT(CASE WHEN fecha_pago_propuesta > :proxima_semana_fin AND estado IN ('en_sap', 'confirmacion_pago') THEN 1 END) as futuras,
-                COALESCE(SUM(CASE WHEN fecha_pago_propuesta BETWEEN :semana_actual_inicio AND :semana_actual_fin THEN monto ELSE 0 END), 0) as monto_esta_semana,
-                COALESCE(SUM(CASE WHEN fecha_pago_propuesta BETWEEN :proxima_semana_inicio AND :proxima_semana_fin THEN monto ELSE 0 END), 0) as monto_proxima_semana
-            FROM facturas
-            WHERE estado IN ('en_sap', 'confirmacion_pago')
-        ");
+    SELECT 
+        COUNT(CASE WHEN fecha_pago_esperada BETWEEN :semana_actual_inicio AND :semana_actual_fin THEN 1 END) as esta_semana,
+        COUNT(CASE WHEN fecha_pago_esperada BETWEEN :proxima_semana_inicio AND :proxima_semana_fin THEN 1 END) as proxima_semana,
+        COUNT(CASE WHEN fecha_pago_esperada < :semana_actual_inicio AND estado IN ('en_sap', 'confirmacion_pago') THEN 1 END) as atrasadas,
+        COUNT(CASE WHEN fecha_pago_esperada > :proxima_semana_fin AND estado IN ('en_sap', 'confirmacion_pago') THEN 1 END) as futuras,
+        COALESCE(SUM(CASE WHEN fecha_pago_esperada BETWEEN :semana_actual_inicio AND :semana_actual_fin THEN monto ELSE 0 END), 0) as monto_esta_semana,
+        COALESCE(SUM(CASE WHEN fecha_pago_esperada BETWEEN :proxima_semana_inicio AND :proxima_semana_fin THEN monto ELSE 0 END), 0) as monto_proxima_semana
+    FROM facturas
+    WHERE estado IN ('en_sap', 'confirmacion_pago')
+");
 
         $stmt->execute([
             ':semana_actual_inicio' => $inicio_semana->format('Y-m-d'),

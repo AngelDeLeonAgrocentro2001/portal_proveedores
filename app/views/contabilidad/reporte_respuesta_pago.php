@@ -62,9 +62,11 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i')
                 <input type="date" name="fecha_fin" id="fecha_fin" value="<?= $fecha_fin ?>" style="padding: 8px; border-radius: 5px; border: 1px solid #ddd;">
             </div>
 
-            <!-- <div class="form-group">
-                <button type="submit" class="btn-primary" style="padding: 8px 25px;">🔍 Generar Reporte</button>
-            </div> -->
+            <div class="form-group">
+                <button type="submit" class="btn-primary" style="padding: 8px 25px; background: #1a237e; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    🔍 Buscar
+                </button>
+            </div>
 
             <div class="form-group">
                 <button type="button" onclick="exportarExcel()" class="btn-success" style="background: #28a745; color: white; padding: 8px 25px; border: none; border-radius: 5px; cursor: pointer;">📊 Exportar Excel</button>
@@ -142,7 +144,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i')
                                     <?php if (!empty($factura['fecha_pago_real'])): ?>
                                         ✅ <?= safeDateFormat($factura['fecha_pago_real']) ?>
                                     <?php else: ?>
-                                        📅 <?= safeDateFormat($factura['fecha_pago_propuesta'] ?? null) ?>
+                                        📅 <?= safeDateFormat($factura['fecha_pago_esperada'] ?? null) ?>
                                     <?php endif; ?>
                                 </td>
                                 <td>

@@ -95,10 +95,10 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
             <td><strong>Estado actual:</strong></td>
             <td><span class="status <?= $factura['estado'] ?? '' ?>"><?= ucfirst(str_replace('_', ' ', $factura['estado'] ?? 'desconocido')) ?></span></td>
         </tr>
-        <?php if (!empty($factura['fecha_pago_propuesta'])): ?>
+        <?php if (!empty($factura['fecha_pago_esperada'])): ?>
         <tr>
             <td><strong>Fecha Pago Propuesta:</strong></td>
-            <td><strong style="color: #00695c;"><?= safeDateFormat($factura['fecha_pago_propuesta']) ?></strong></td>
+            <td><strong style="color: #00695c;"><?= safeDateFormat($factura['fecha_pago_esperada']) ?></strong></td>
         </tr>
         <?php endif; ?>
         
@@ -225,7 +225,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                 <th>Tipo</th>
                 <th>Factura</th>
                 <th>Monto</th>
-                <th>Fecha Pago Propuesta</th>
+                <th>Fecha de Pago</th>
                 <th>Acción</th>
             </tr>
         </thead>
@@ -250,7 +250,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                     </td>
                     <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
                     <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
-                    <td><strong><?= safeDateFormat($f['fecha_pago_propuesta'] ?? null) ?></strong></td>
+                    <td><strong><?= safeDateFormat($f['fecha_pago_esperada'] ?? null) ?></strong></td>
                     <td>
                         <a href="?controller=contabilidad&action=dashboard&buscar=<?= urlencode($f['numero_factura'] ?? '') ?>" 
                            class="btn-small">Revisar</a>
@@ -272,7 +272,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                 <th>Proveedor</th>
                 <th>Factura</th>
                 <th>Monto</th>
-                <th>Fecha Pago Propuesta</th>
+                <th>Fecha de Pago</th>
                 <th>Comprobante SAP</th>
                 <th>Acción</th>
             </tr>
@@ -332,7 +332,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                     <td><?= htmlspecialchars(substr($f['proveedor_nombre'] ?? '', 0, 30)) ?></td>
                     <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
                     <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
-                    <td><strong><?= safeDateFormat($f['fecha_pago_propuesta'] ?? null) ?></strong></td>
+                    <td><strong><?= safeDateFormat($f['fecha_pago_esperada'] ?? null) ?></strong></td>
                     <td>
                         <?php
                         $semana_pago = $f['semana_pago'] ?? '';
@@ -352,7 +352,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                         ?>
                     </td>
                     <td>
-                        <button onclick="mostrarModalAprobarPago(<?= $f['id'] ?>, '<?= htmlspecialchars($f['numero_factura']) ?>', <?= $f['monto'] ?>)" 
+                        <button onclick="mostrarModalAprobarPago(<?= $f['id'] ?>, '<?= htmlspecialchars($f['numero_factura']) ?>', <?= $f['monto'] ?>, '<?= $f['fecha_pago_esperada'] ?? '' ?>')"
                                 class="btn-aprobar-pago" style="background: #28a745; color: white; border: none; padding: 5px 12px; border-radius: 5px; cursor: pointer;">
                             💰 Registrar Pago
                         </button>
@@ -471,11 +471,11 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
 </div>
 
 <script>
-    function mostrarModalAprobarPago(facturaId, facturaNumero, monto) {
+    function mostrarModalAprobarPago(facturaId, facturaNumero, monto,fechaPago) {
     document.getElementById('pago_factura_id').value = facturaId;
     document.getElementById('pago_factura_numero').value = facturaNumero;
     document.getElementById('pago_monto').value = monto;
-    document.getElementById('pago_fecha').value = new Date().toISOString().slice(0,10);
+    document.getElementById('pago_fecha').value = fechaPago || new Date().toISOString().slice(0,10);
     document.getElementById('pago_comprobante').value = '';
     document.getElementById('pago_observaciones').value = '';
     document.getElementById('modalAprobarPago').style.display = 'block';
@@ -610,6 +610,11 @@ function confirmarEnviarSAP() {
     })
     .then(response => response.json())
     .then(data => {
+        // ========== MOSTRAR JSON EN CONSOLA ==========
+        console.log('=== JSON ENVIADO A SAP ===');
+        console.log(JSON.stringify(data.payload, null, 2));
+        console.log('==========================');
+        
         if (data.success) {
             alert('✅ ' + data.message);
             location.reload();
