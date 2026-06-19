@@ -52,6 +52,20 @@ public function login($cardcode, $email, $password) {
         return false;
     }
 
+    public function getUserByEmail($email) {
+        $stmt = $this->pdo->prepare("
+            SELECT u.id, u.cardcode, u.email, u.username, u.rol,
+                   u.tipo_supervisor, u.area,
+                   p.nombre, p.nit, p.dias_credito, p.tipo_proveedor
+            FROM usuarios u
+            LEFT JOIN proveedores p ON u.cardcode = p.cardcode
+            WHERE u.email = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$email]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
     public function crearSupervisor($cardcode, $email, $username, $password, $tipo_supervisor, $area = 'compras') {
         $tiposValidos = ['transporte', 'material_empaque', 'finanzas', 'contabilidad'];
         if (!in_array($tipo_supervisor, $tiposValidos)) {
