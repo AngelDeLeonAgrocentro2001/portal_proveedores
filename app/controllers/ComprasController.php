@@ -19,6 +19,10 @@ class ComprasController {
         }
     }
     
+    public function dashboard() {
+        $this->revisionPendiente();
+    }
+
     // Listar facturas pendientes de revisión por Compras
     public function revisionPendiente() {
         $estado = $_GET['estado'] ?? 'reportada';
