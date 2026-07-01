@@ -9,85 +9,114 @@ if (isset($_SESSION['user'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portal Proveedores Agrocentro</title>
-    <link rel="stylesheet" href="../../public/assets/css/style.css">
-    <style>
-        .login-body {
-            background: #f8f9fa;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: Arial, sans-serif;
+    <title>Portal Proveedores — Agrocentro</title>
+    <link rel="icon" type="image/x-icon" href="../public/assets/images/LogoPortaldeProveedores.png">
+    <link rel="shortcut icon" href="../public/assets/images/LogoPortaldeProveedores.png">
+    <link rel="stylesheet" href="../public/assets/css/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary:      '#1d6f3c',
+                        'primary-dark':'#155a30',
+                        teal:         '#0D7C66',
+                        bright:       '#4CAF50',
+                        'dark-bg':    '#0E1E14',
+                    }
+                }
+            }
         }
-        .login-box {
-            background: white;
-            padding: 40px 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            width: 100%;
-            max-width: 420px;
-        }
-        input {
-            width: 100%;
-            padding: 14px 16px;
-            margin: 12px 0;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 16px;
-            background: #f9f9f9;
-        }
-        input:focus {
-            outline: none;
-            border-color: #006400;
-            background: white;
-        }
-        button {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(to right, #006400, #008000);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 17px;
-            cursor: pointer;
-            margin-top: 15px;
-        }
-        button:hover {
-            background: linear-gradient(to right, #004d00, #006400);
-        }
-        .links {
-            margin-top: 25px;
-            text-align: center;
-            font-size: 14px;
-        }
-        .links a {
-            color: #006400;
-            text-decoration: none;
-            margin: 0 10px;
-        }
-        .error { color: #d32f2f; text-align: center; margin: 15px 0; }
-    </style>
+    </script>
 </head>
-<body class="login-body">
-    <div class="login-box">
-        <h2 style="text-align:center; color:#006400; margin-bottom:25px;">Portal de Proveedores</h2>
 
+<body class="min-h-screen flex items-center justify-center p-5 relative overflow-hidden"
+      style="background: linear-gradient(135deg, #0E1E14 0%, #1d6f3c 55%, #0a3d22 100%);">
+
+    <!-- Decorative circles -->
+    <div class="absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-10"
+         style="background: radial-gradient(circle, #4CAF50, transparent)"></div>
+    <div class="absolute -bottom-20 -left-20 w-72 h-72 rounded-full opacity-10"
+         style="background: radial-gradient(circle, #0D7C66, transparent)"></div>
+
+    <!-- Card -->
+    <div class="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md px-10 py-12">
+
+        <!-- Logo -->
+        <div class="flex flex-col items-center mb-8">
+            <img src="../public/assets/images/agrocentroLogo.png"
+                 alt="Agrocentro" class="h-20 w-auto mb-3">
+            <p class="text-lg font-bold text-gray-800 tracking-wide">Agrocentro</p>
+            <p class="text-xs uppercase tracking-widest text-gray-400 mt-0.5">Portal de Proveedores</p>
+        </div>
+
+        <!-- Error -->
         <?php if (isset($error)): ?>
-            <div class="error"><?= htmlspecialchars($error) ?></div>
+            <div class="mb-5 flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                <span>⚠️</span>
+                <?= htmlspecialchars($error) ?>
+            </div>
         <?php endif; ?>
 
-        <form method="POST" action="index.php?controller=auth&action=login">
-            <input type="text" name="cardcode" placeholder="Ingrese Código de proveedor" required autofocus>
-            <input type="email" name="email" placeholder="Ingrese Correo Electrónico" required>
-            <input type="password" name="password" placeholder="Ingrese Contraseña" required>
-            <button type="submit">Ingresar</button>
+        <!-- Form -->
+        <form method="POST" action="index.php?controller=auth&action=login" class="space-y-4">
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Código de Proveedor
+                </label>
+                <input type="text" name="cardcode"
+                       placeholder="Ej. P-00123"
+                       required autofocus
+                       class="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-800 text-sm
+                              focus:outline-none focus:border-teal-600 focus:bg-white focus:ring-2 focus:ring-teal-600/10
+                              transition-all duration-200">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Correo Electrónico
+                </label>
+                <input type="email" name="email"
+                       placeholder="correo@empresa.com"
+                       required
+                       class="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-800 text-sm
+                              focus:outline-none focus:border-teal-600 focus:bg-white focus:ring-2 focus:ring-teal-600/10
+                              transition-all duration-200">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Contraseña
+                </label>
+                <input type="password" name="password"
+                       placeholder="••••••••"
+                       required
+                       class="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-800 text-sm
+                              focus:outline-none focus:border-teal-600 focus:bg-white focus:ring-2 focus:ring-teal-600/10
+                              transition-all duration-200">
+            </div>
+
+            <button type="submit"
+                    class="w-full mt-2 py-3.5 rounded-lg text-white font-bold text-sm tracking-wide
+                           transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0"
+                    style="background: linear-gradient(135deg, #0D7C66, #1d6f3c);">
+                Ingresar al Portal
+            </button>
         </form>
 
-        <div class="links">
-            <a href="#">Olvide mi contraseña</a> | 
-            <a href="#">Activar Usuario</a>
+        <!-- Links -->
+        <div class="mt-6 text-center text-xs text-gray-400 space-x-2">
+            <a href="#" class="hover:text-teal-700 transition-colors font-medium" style="color:#0D7C66;">
+                Olvidé mi contraseña
+            </a>
+            <span class="text-gray-300">|</span>
+            <a href="#" class="hover:text-teal-700 transition-colors font-medium" style="color:#0D7C66;">
+                Activar usuario
+            </a>
         </div>
+
     </div>
 </body>
 </html>
