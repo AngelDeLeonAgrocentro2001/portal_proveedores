@@ -223,51 +223,6 @@
     </div>
 </div>
 <script>
-// Mostrar panel de depuración si hay viajes seleccionados
-function actualizarPreviewJSON() {
-    const viajes = viajesSeleccionados;
-    const panel = document.getElementById('debug-panel');
-    const preview = document.getElementById('json-preview');
-    
-    if (viajes.length > 0) {
-        const numeroFactura = document.getElementById('numero_factura')?.value || '';
-        const monto = parseFloat(document.getElementById('monto')?.value || 0);
-        const fechaEmision = document.getElementById('fecha_emision')?.value || new Date().toISOString().split('T')[0];
-        const cardcode = document.getElementById('cardcode')?.value || '';
-        
-        const partes = numeroFactura.trim().split(' ', 2);
-        const serie = partes[0] || '';
-        const number = partes[1] || numeroFactura;
-        
-        const fechaObj = new Date(fechaEmision);
-        const fechaFormateada = fechaObj.getDate().toString().padStart(2, '0') + 
-                                (fechaObj.getMonth() + 1).toString().padStart(2, '0') + 
-                                fechaObj.getFullYear();
-        
-        const payload = {
-            CardCode: cardcode,
-            trip_ids: viajes,
-            Date: fechaFormateada,
-            total: monto,
-            serie: serie,
-            number: number
-        };
-        
-        preview.textContent = JSON.stringify(payload, null, 2);
-        panel.style.display = 'block';
-    } else {
-        panel.style.display = 'none';
-    }
-}
-
-// Sobrescribir actualizarViajesSeleccionados para incluir la preview
-const originalActualizar = actualizarViajesSeleccionados;
-actualizarViajesSeleccionados = function() {
-    originalActualizar();
-    actualizarPreviewJSON();
-};
-</script>
-<script>
 // Variables para viajes de transporte
 let viajesSeleccionados = [];
 
@@ -276,16 +231,30 @@ function actualizarViajesSeleccionados() {
     const checkboxes = document.querySelectorAll('.viaje-checkbox:checked');
     viajesSeleccionados = Array.from(checkboxes).map(cb => parseInt(cb.value));
     document.getElementById('viajes_transporte_input').value = JSON.stringify(viajesSeleccionados);
-    
-    // Mostrar contador
+
     const contador = document.getElementById('viajes-contador');
     if (contador) {
         contador.innerText = viajesSeleccionados.length;
     }
-    
-    // Mostrar JSON en consola cada vez que se selecciona/deselecciona un viaje
+
     if (viajesSeleccionados.length > 0) {
-        mostrarJsonEnConsola();
+        const numeroFactura = document.getElementById('numero_factura')?.value || '';
+        const monto = parseFloat(document.getElementById('monto')?.value || 0);
+        const cardcode = document.getElementById('cardcode')?.value || '';
+        const fechaEmision = document.getElementById('fecha_emision')?.value || new Date().toISOString().split('T')[0];
+        const partes = numeroFactura.trim().split(' ', 2);
+        const fechaObj = new Date(fechaEmision);
+        const fechaFormateada = fechaObj.getDate().toString().padStart(2, '0') +
+                                (fechaObj.getMonth() + 1).toString().padStart(2, '0') +
+                                fechaObj.getFullYear();
+        console.log(JSON.stringify({
+            CardCode: cardcode,
+            trip_ids: viajesSeleccionados,
+            Date: fechaFormateada,
+            total: monto,
+            serie: partes[0] || '',
+            number: partes[1] || numeroFactura
+        }, null, 2));
     }
 }
 

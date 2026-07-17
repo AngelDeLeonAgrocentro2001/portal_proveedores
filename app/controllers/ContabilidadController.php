@@ -233,6 +233,30 @@ class ContabilidadController
             }
         }
 
+        // Guardar tipo de factura y retenciones seleccionadas
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar_tipo_retenciones'])) {
+            $factura_id = $_POST['factura_id'] ?? 0;
+            $tipo_factura = $_POST['tipo_factura'] ?? '';
+            $retenciones = isset($_POST['retenciones']) ? (array)$_POST['retenciones'] : [];
+
+            $tipos_validos = ['contribuyente_normal', 'pequeno_contribuyente'];
+            if (!$factura_id || !in_array($tipo_factura, $tipos_validos)) {
+                $error = "Datos de tipo de factura inválidos";
+            } else {
+                $stmt = $this->pdo->prepare("
+                    UPDATE facturas
+                    SET tipo_factura = ?, retenciones_seleccionadas = ?
+                    WHERE id = ?
+                ");
+                if ($stmt->execute([$tipo_factura, json_encode($retenciones), $factura_id])) {
+                    $success = "Tipo de factura y retenciones guardados";
+                    $factura = $this->getFacturaById($factura_id);
+                } else {
+                    $error = "Error al guardar tipo de factura";
+                }
+            }
+        }
+
         // Procesar envío a SAP
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enviar_sap'])) {
             $factura_id = $_POST['factura_id'] ?? 0;
@@ -922,16 +946,18 @@ class ContabilidadController
 
         // Usar la fecha de la factura si existe
         $docDate = !empty($factura['fecha_factura']) ? $factura['fecha_factura'] : $fechaActual;
-        $taxDate = $docDate;
+        $taxDate = !empty($factura['fecha_factura_sat']) ? $factura['fecha_factura_sat'] : $docDate;
         $docDueDate = date('Y-m-d', strtotime($docDate . ' +30 days'));
 
         $nitProveedor = $factura['nit'] ?? '';
-        $esPequeñoContribuyente = false;
-
-        if (strlen($nitProveedor) <= 8 || substr($nitProveedor, 0, 1) == '1') {
-            $esPequeñoContribuyente = true;
-            error_log("NIT $nitProveedor es Pequeño Contribuyente, usando TaxCode EXE");
+        // Usar tipo_factura guardado explícitamente; fallback a detección por NIT
+        $esPequeñoContribuyente = ($factura['tipo_factura'] ?? '') === 'pequeno_contribuyente';
+        if (($factura['tipo_factura'] ?? '') === '') {
+            $esPequeñoContribuyente = (strlen($nitProveedor) <= 8 || substr($nitProveedor, 0, 1) == '1');
         }
+        $retencionesSeleccionadas = json_decode($factura['retenciones_seleccionadas'] ?? '[]', true) ?: [];
+        error_log("Tipo factura: " . ($factura['tipo_factura'] ?? 'no definido') . ", Pequeño contribuyente: " . ($esPequeñoContribuyente ? 'SI' : 'NO'));
+        error_log("Retenciones seleccionadas: " . implode(', ', $retencionesSeleccionadas));
 
         // ========== IMPORTANTE: Usar el monto de la factura, no el de la orden ==========
         $docTotal = (float)$factura['monto'];  // Monto real de la factura
@@ -987,7 +1013,7 @@ class ContabilidadController
             "DocDate" => $docDate,
             "TaxDate" => $taxDate,
             "DocDueDate" => $docDueDate,
-            "Comments" => "Factura: {$factura['numero_factura']} - {$observaciones}",
+            "Comments" => implode(' | ', array_filter(array_column($documentLines, 'ItemDescription'))),
             "JournalMemo" => "Factura {$factura['numero_factura']}",
             "U_NIT" => $nitProveedor,
             "U_NOMBRE" => $nombreEmisor,

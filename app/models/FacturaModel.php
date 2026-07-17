@@ -200,16 +200,14 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
             try {
                 require_once BASE_PATH . 'app/models/TransporteAPIModel.php';
                 $transporteAPI = new TransporteAPIModel();
-                
-                // Extraer serie y número de la factura
+
                 $partes = explode(' ', trim($numero_factura), 2);
                 $serie_factura = trim($partes[0] ?? '');
                 $numero_dte_factura = trim($partes[1] ?? $numero_factura);
-                
-                // Fecha en formato DDMMYYYY (ej: 25102026)
-                $fechaObj = new DateTime($fecha_factura_sat);
-                $fechaFormateada = $fechaObj->format('dmY');
-                
+
+                // Fecha en formato Y-m-d
+                $fechaFormateada = !empty($fecha_factura_sat) ? $fecha_factura_sat : date('Y-m-d');
+
                 $resultadoMarcado = $transporteAPI->marcarViajesPagados(
                     $cardcode,
                     $tripIds,
@@ -218,13 +216,20 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
                     $serie_factura,
                     $numero_dte_factura
                 );
-                
-                if ($resultadoMarcado['success']) {
+
+                if ($resultadoMarcado['success'] ?? false) {
                     $viajes_marcados = true;
-                    error_log("✅ Viajes marcados como pagados para factura {$factura_id}: " . implode(',', $tripIds));
+                    $id_payment_header = $resultadoMarcado['id_payment_header'] ?? null;
+
+                    if ($id_payment_header) {
+                        $stmtPH = $this->pdo->prepare("UPDATE facturas SET id_pago_transporte = ? WHERE id = ?");
+                        $stmtPH->execute([$id_payment_header, $factura_id]);
+                    }
+
+                    error_log("✅ Viajes marcados, id_payment_header: $id_payment_header");
                 } else {
                     $error_viajes = $resultadoMarcado['message'] ?? 'Error desconocido';
-                    error_log("❌ Error al marcar viajes como pagados: " . $error_viajes);
+                    error_log("❌ Error al marcar viajes: " . $error_viajes);
                 }
             } catch (Exception $e) {
                 $error_viajes = $e->getMessage();
@@ -239,9 +244,10 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
     }
     
     if ($viajes_marcados) {
-        $mensaje_adicional .= " ✅ " . count(json_decode($viajes_transporte, true)) . " viaje(s) marcado(s) como pagados en sistema de transporte.";
-    } elseif (!empty($viajes_transporte) && $viajes_transporte !== '[]' && $error_viajes) {
-        $mensaje_adicional .= " ⚠️ No se pudieron marcar los viajes: " . $error_viajes;
+        $n = count(json_decode($viajes_transporte, true));
+        $mensaje_adicional .= " ✅ $n viaje(s) marcados." . (isset($id_payment_header) && $id_payment_header ? " ID Pago Transporte: $id_payment_header." : '');
+    } elseif (!empty($error_viajes)) {
+        $mensaje_adicional .= " ⚠️ No se pudieron marcar los viajes: $error_viajes";
     }
 
     return [

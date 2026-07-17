@@ -135,6 +135,99 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
         <?php endif; ?>
     </div>
     
+    <!-- TIPO DE FACTURA Y RETENCIONES -->
+    <div style="margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 8px; border-left: 4px solid #43a047;">
+        <h3 style="color: #2e7d32; margin-bottom: 15px;">🧾 Tipo de Factura y Retenciones</h3>
+        <form method="POST" id="formTipoRetenciones">
+            <input type="hidden" name="factura_id" value="<?= $factura['id'] ?>">
+            <input type="hidden" name="guardar_tipo_retenciones" value="1">
+
+            <div style="margin-bottom: 15px;">
+                <strong>Tipo de factura:</strong>
+                <div style="margin-top: 8px; display: flex; gap: 30px;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="radio" name="tipo_factura" value="contribuyente_normal"
+                            <?= ($factura['tipo_factura'] ?? '') === 'contribuyente_normal' ? 'checked' : '' ?>
+                            onchange="mostrarRetenciones(this.value)">
+                        <span>Contribuyente Normal</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="radio" name="tipo_factura" value="pequeno_contribuyente"
+                            <?= ($factura['tipo_factura'] ?? '') === 'pequeno_contribuyente' ? 'checked' : '' ?>
+                            onchange="mostrarRetenciones(this.value)">
+                        <span>Pequeño Contribuyente</span>
+                    </label>
+                </div>
+            </div>
+
+            <?php
+            $retencionesGuardadas = json_decode($factura['retenciones_seleccionadas'] ?? '[]', true) ?: [];
+            $tipoActual = $factura['tipo_factura'] ?? '';
+            ?>
+
+            <!-- Retenciones Contribuyente Normal -->
+            <div id="retenciones_normal" style="display:<?= $tipoActual === 'contribuyente_normal' ? 'block' : 'none' ?>; margin-bottom: 15px;">
+                <strong>Retenciones aplicables:</strong>
+                <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                    <?php
+                    $opcionesNormal = [
+                        'sin_retencion'         => 'Sin Retención',
+                        'retencion_iva_65'       => 'Retención IVA 65%',
+                        'retencion_iva_15'       => 'Retención IVA 15%',
+                        'retencion_isr_5'        => 'Retención ISR 5% (primeros Q30,000)',
+                        'retencion_isr_7'        => 'Retención ISR 7% (mayor a Q30,000)',
+                        'isr_no_domiciliados_5'  => 'ISR No Domiciliados 5%',
+                        'retencion_definitiva'   => 'Retención Definitiva ISR',
+                        'combustible_idp'        => 'Combustible / IDP',
+                        'timbres_fiscales'       => 'Timbres Fiscales 0.05%',
+                        'inguat_10'              => 'INGUAT 10%',
+                    ];
+                    foreach ($opcionesNormal as $val => $label): ?>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 8px; background:#f1f8e9; border-radius:4px;">
+                        <input type="checkbox" name="retenciones[]" value="<?= $val ?>"
+                            <?= in_array($val, $retencionesGuardadas) ? 'checked' : '' ?>>
+                        <span style="font-size:0.9rem;"><?= $label ?></span>
+                    </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <!-- Retenciones Pequeño Contribuyente -->
+            <div id="retenciones_pequeno" style="display:<?= $tipoActual === 'pequeno_contribuyente' ? 'block' : 'none' ?>; margin-bottom: 15px;">
+                <strong>Retenciones aplicables:</strong>
+                <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                    <?php
+                    $opcionesPequeno = [
+                        'sin_retencion'     => 'Sin Retención',
+                        'retencion_iva_5'   => 'Retención IVA 5% Pequeño Contribuyente',
+                        'inguat_10'         => 'INGUAT 10%',
+                        'timbres_fiscales'  => 'Timbres Fiscales 0.05%',
+                    ];
+                    foreach ($opcionesPequeno as $val => $label): ?>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 8px; background:#f1f8e9; border-radius:4px;">
+                        <input type="checkbox" name="retenciones[]" value="<?= $val ?>"
+                            <?= in_array($val, $retencionesGuardadas) ? 'checked' : '' ?>>
+                        <span style="font-size:0.9rem;"><?= $label ?></span>
+                    </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <button type="submit" style="background:#43a047; color:white; border:none; padding:8px 20px; border-radius:5px; cursor:pointer; font-size:0.95rem;">
+                💾 Guardar tipo y retenciones
+            </button>
+
+            <?php if (!empty($factura['tipo_factura'])): ?>
+            <span style="margin-left:12px; color:#2e7d32; font-size:0.85rem;">
+                ✔ Guardado: <?= $factura['tipo_factura'] === 'pequeno_contribuyente' ? 'Pequeño Contribuyente' : 'Contribuyente Normal' ?>
+                <?php if (!empty($retencionesGuardadas)): ?>
+                — <?= implode(', ', array_map(fn($r) => str_replace('_', ' ', $r), $retencionesGuardadas)) ?>
+                <?php endif; ?>
+            </span>
+            <?php endif; ?>
+        </form>
+    </div>
+
     <!-- SECCIÓN DE RETENCIONES -->
     <div style="margin-top: 20px; padding: 15px; background: #fef9e6; border-radius: 8px; border-left: 4px solid #ff9800;">
         <h3 style="color: #e65100; margin-bottom: 15px;">📎 Documentos de Retención</h3>
@@ -471,6 +564,13 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
 </div>
 
 <script>
+    function mostrarRetenciones(tipo) {
+        document.getElementById('retenciones_normal').style.display = (tipo === 'contribuyente_normal') ? 'block' : 'none';
+        document.getElementById('retenciones_pequeno').style.display = (tipo === 'pequeno_contribuyente') ? 'block' : 'none';
+        // Desmarcar todos al cambiar tipo
+        document.querySelectorAll('#formTipoRetenciones input[type=checkbox]').forEach(cb => cb.checked = false);
+    }
+
     function mostrarModalAprobarPago(facturaId, facturaNumero, monto,fechaPago) {
     document.getElementById('pago_factura_id').value = facturaId;
     document.getElementById('pago_factura_numero').value = facturaNumero;
