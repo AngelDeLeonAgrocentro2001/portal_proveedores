@@ -447,6 +447,12 @@ class ContabilidadController
             }
         }
 
+        // Retenciones habilitadas en SAP para el proveedor de la factura mostrada
+        $retencionesDisponibles = [];
+        if ($factura) {
+            $retencionesDisponibles = $this->getRetencionesDisponibles($factura['cardcode']);
+        }
+
         // Listar facturas pendientes de envío a SAP (aprobadas por Compras)
         $facturas_pendientes_sap = $this->getFacturasPendientesSAP();
 
@@ -959,6 +965,27 @@ class ContabilidadController
         error_log("Tipo factura: " . ($factura['tipo_factura'] ?? 'no definido') . ", Pequeño contribuyente: " . ($esPequeñoContribuyente ? 'SI' : 'NO'));
         error_log("Retenciones seleccionadas: " . implode(', ', $retencionesSeleccionadas));
 
+        // Retro-compatibilidad: facturas guardadas antes de que las retenciones se cargaran
+        // directamente desde SAP (CRD4/OWHT) usaban estas claves internas en vez del WTCode real.
+        $mapaWTCodeLegacy = [
+            'retencion_iva_65' => '65%',
+            'retencion_iva_15' => '15%',
+            'retencion_isr_5'  => 'ISR5',
+            'retencion_isr_7'  => 'ISR7',
+        ];
+
+        // Desde el dashboard de Contabilidad, el valor guardado ya ES el WTCode real de SAP
+        // (viene de getRetencionesDisponibles), por lo que SAP calcula el monto automáticamente.
+        $withholdingTaxDataCollection = [];
+        foreach ($retencionesSeleccionadas as $retencion) {
+            if ($retencion === 'sin_retencion' || $retencion === '') {
+                continue;
+            }
+            $wtCode = $mapaWTCodeLegacy[$retencion] ?? $retencion;
+            $withholdingTaxDataCollection[] = ['WTCode' => $wtCode];
+        }
+        error_log("WithholdingTaxDataCollection a enviar: " . json_encode($withholdingTaxDataCollection));
+
         // ========== IMPORTANTE: Usar el monto de la factura, no el de la orden ==========
         $docTotal = (float)$factura['monto'];  // Monto real de la factura
         error_log("Monto de la factura: $docTotal");
@@ -984,15 +1011,15 @@ class ContabilidadController
 
             $taxCode = $esPequeñoContribuyente ? 'EXE' : ($linea['TaxCode'] ?? 'IVA');
 
-            // Construir línea según tu ejemplo (SOLO PriceAfterVAT, sin Price)
+            
             $lineData = [
                 "LineNum" => $index,
                 "ItemDescription" => $linea['Description'] ?? $linea['ItemDescription'] ?? 'Servicio',
                 "Quantity" => $quantity,
-                "PriceAfterVAT" => $pricePerUnit,  // Precio unitario basado en el total de la factura
+                "PriceAfterVAT" => $pricePerUnit,  
                 "TaxCode" => $taxCode,
                 "U_TipoA" => "S",
-                "AccountCode" => $linea['AccountCode'] ?? '640901001',  // Cuenta por defecto como en tu ejemplo
+                "AccountCode" => $linea['AccountCode'] ?? '640901001',
                 "CostingCode" => $linea['CostingCode'] ?? 'D08',
                 "CostingCode2" => $linea['CostingCode2'] ?? '',
                 "CostingCode3" => $linea['CostingCode3'] ?? '',
@@ -1005,11 +1032,11 @@ class ContabilidadController
             $documentLines[] = $lineData;
         }
 
-        // Construir el payload FINAL según tu ejemplo
+        
         $purchaseInvoice = [
             "DocType" => "dDocument_Service",
             "CardCode" => $cardCode,
-            "U_CODIGO" => $cardCode,  // ← Como en tu ejemplo
+            "U_CODIGO" => $cardCode, 
             "DocDate" => $docDate,
             "TaxDate" => $taxDate,
             "DocDueDate" => $docDueDate,
@@ -1018,12 +1045,16 @@ class ContabilidadController
             "U_NIT" => $nitProveedor,
             "U_NOMBRE" => $nombreEmisor,
             "U_DIRECCI" => $proveedor['direccion'] ?? 'Ciudad de Guatemala',  // Dirección por defecto
-            "Series" => 653,  // ← CAMBIADO a 653 según tu ejemplo (antes era 82)
+            "Series" => 82,  // ← CAMBIADO a 653 según tu ejemplo (antes era 82)
             "NumAtCard" => $factura['numero_factura'] . '-' . $factura_id,  // Formato como en ejemplo
             "DocCurrency" => "QTZ",
             "DocRate" => 1,
             "DocumentLines" => $documentLines
         ];
+
+        if (!empty($withholdingTaxDataCollection)) {
+            $purchaseInvoice['WithholdingTaxDataCollection'] = $withholdingTaxDataCollection;
+        }
 
         // NOTA: NO incluyas "DocTotal" en el payload para dDocument_Service
         // SAP lo calcula automáticamente desde las líneas
@@ -1682,6 +1713,60 @@ class ContabilidadController
         }
     }
 
+
+    // Retenciones (WTCode) habilitadas en SAP para un proveedor específico (tabla CRD4 = BP Withholding Tax)
+    private function getRetencionesDisponibles($cardCode)
+    {
+        try {
+            $sap = new DatabaseSAP();
+            $conn = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+
+            if (!$conn) {
+                error_log("getRetencionesDisponibles - No se pudo conectar a HANA");
+                return [];
+            }
+
+            $query = '
+                SELECT T1."WTCode" as "wtcode", T2."WTName" as "wtname"
+                FROM "T_GT_AGROCENTRO_2016".OCRD T0
+                LEFT OUTER JOIN "T_GT_AGROCENTRO_2016".CRD4 T1 ON T0."CardCode" = T1."CardCode"
+                INNER JOIN "T_GT_AGROCENTRO_2016".OWHT T2 ON T1."WTCode" = T2."WTCode"
+                WHERE T0."CardCode" = ?
+            ';
+
+            $stmt = odbc_prepare($conn, $query);
+            if (!$stmt || !odbc_execute($stmt, [$cardCode])) {
+                error_log("getRetencionesDisponibles - Error ejecutando consulta: " . odbc_errormsg($conn));
+                odbc_close($conn);
+                return [];
+            }
+
+            $retenciones = [];
+            while ($row = odbc_fetch_array($stmt)) {
+                $wtCode = trim($row['wtcode'] ?? '');
+                if ($wtCode === '') continue;
+
+                $wtNameRaw = trim($row['wtname'] ?? '');
+                // 'auto' falla con tildes/ñ de HANA (las sustituye por '?'); si ya viene en UTF-8 válido
+                // se deja tal cual, si no, se asume Windows-1252 (codepage típico del driver ODBC).
+                $wtName = mb_check_encoding($wtNameRaw, 'UTF-8')
+                    ? $wtNameRaw
+                    : mb_convert_encoding($wtNameRaw, 'UTF-8', 'Windows-1252');
+
+                $retenciones[] = [
+                    'WTCode' => $wtCode,
+                    'WTName' => $wtName
+                ];
+            }
+
+            odbc_free_result($stmt);
+            odbc_close($conn);
+            return $retenciones;
+        } catch (Exception $e) {
+            error_log("getRetencionesDisponibles - Error: " . $e->getMessage());
+            return [];
+        }
+    }
 
     private function getOrdenCompraDetalles($docentry, $cardcode)
     {

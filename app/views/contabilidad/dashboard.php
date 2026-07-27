@@ -147,69 +147,39 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                 <div style="margin-top: 8px; display: flex; gap: 30px;">
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
                         <input type="radio" name="tipo_factura" value="contribuyente_normal"
-                            <?= ($factura['tipo_factura'] ?? '') === 'contribuyente_normal' ? 'checked' : '' ?>
-                            onchange="mostrarRetenciones(this.value)">
+                            <?= ($factura['tipo_factura'] ?? '') === 'contribuyente_normal' ? 'checked' : '' ?>>
                         <span>Contribuyente Normal</span>
                     </label>
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
                         <input type="radio" name="tipo_factura" value="pequeno_contribuyente"
-                            <?= ($factura['tipo_factura'] ?? '') === 'pequeno_contribuyente' ? 'checked' : '' ?>
-                            onchange="mostrarRetenciones(this.value)">
+                            <?= ($factura['tipo_factura'] ?? '') === 'pequeno_contribuyente' ? 'checked' : '' ?>>
                         <span>Pequeño Contribuyente</span>
                     </label>
                 </div>
             </div>
 
-            <?php
-            $retencionesGuardadas = json_decode($factura['retenciones_seleccionadas'] ?? '[]', true) ?: [];
-            $tipoActual = $factura['tipo_factura'] ?? '';
-            ?>
+            <?php $retencionesGuardadas = json_decode($factura['retenciones_seleccionadas'] ?? '[]', true) ?: []; ?>
 
-            <!-- Retenciones Contribuyente Normal -->
-            <div id="retenciones_normal" style="display:<?= $tipoActual === 'contribuyente_normal' ? 'block' : 'none' ?>; margin-bottom: 15px;">
-                <strong>Retenciones aplicables:</strong>
+            <!-- Retenciones habilitadas en SAP (CRD4/OWHT) para este proveedor -->
+            <div style="margin-bottom: 15px;">
+                <strong>Retenciones aplicables (según configuración SAP de <?= htmlspecialchars($factura['cardcode']) ?>):</strong>
                 <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                    <?php
-                    $opcionesNormal = [
-                        'sin_retencion'         => 'Sin Retención',
-                        'retencion_iva_65'       => 'Retención IVA 65%',
-                        'retencion_iva_15'       => 'Retención IVA 15%',
-                        'retencion_isr_5'        => 'Retención ISR 5% (primeros Q30,000)',
-                        'retencion_isr_7'        => 'Retención ISR 7% (mayor a Q30,000)',
-                        'isr_no_domiciliados_5'  => 'ISR No Domiciliados 5%',
-                        'retencion_definitiva'   => 'Retención Definitiva ISR',
-                        'combustible_idp'        => 'Combustible / IDP',
-                        'timbres_fiscales'       => 'Timbres Fiscales 0.05%',
-                        'inguat_10'              => 'INGUAT 10%',
-                    ];
-                    foreach ($opcionesNormal as $val => $label): ?>
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 8px; background:#f1f8e9; border-radius:4px;">
-                        <input type="checkbox" name="retenciones[]" value="<?= $val ?>"
-                            <?= in_array($val, $retencionesGuardadas) ? 'checked' : '' ?>>
-                        <span style="font-size:0.9rem;"><?= $label ?></span>
+                        <input type="checkbox" name="retenciones[]" value="sin_retencion"
+                            <?= in_array('sin_retencion', $retencionesGuardadas) ? 'checked' : '' ?>>
+                        <span style="font-size:0.9rem;">Sin Retención</span>
                     </label>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-
-            <!-- Retenciones Pequeño Contribuyente -->
-            <div id="retenciones_pequeno" style="display:<?= $tipoActual === 'pequeno_contribuyente' ? 'block' : 'none' ?>; margin-bottom: 15px;">
-                <strong>Retenciones aplicables:</strong>
-                <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                    <?php
-                    $opcionesPequeno = [
-                        'sin_retencion'     => 'Sin Retención',
-                        'retencion_iva_5'   => 'Retención IVA 5% Pequeño Contribuyente',
-                        'inguat_10'         => 'INGUAT 10%',
-                        'timbres_fiscales'  => 'Timbres Fiscales 0.05%',
-                    ];
-                    foreach ($opcionesPequeno as $val => $label): ?>
+                    <?php if (empty($retencionesDisponibles)): ?>
+                        <span style="grid-column: 1 / -1; color:#999; font-size:0.85rem;">
+                            SAP no tiene retenciones configuradas para este proveedor (tabla CRD4).
+                        </span>
+                    <?php else: foreach ($retencionesDisponibles as $ret): ?>
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 8px; background:#f1f8e9; border-radius:4px;">
-                        <input type="checkbox" name="retenciones[]" value="<?= $val ?>"
-                            <?= in_array($val, $retencionesGuardadas) ? 'checked' : '' ?>>
-                        <span style="font-size:0.9rem;"><?= $label ?></span>
+                        <input type="checkbox" name="retenciones[]" value="<?= htmlspecialchars($ret['WTCode']) ?>"
+                            <?= in_array($ret['WTCode'], $retencionesGuardadas) ? 'checked' : '' ?>>
+                        <span style="font-size:0.9rem;"><?= htmlspecialchars($ret['WTName']) ?> (<?= htmlspecialchars($ret['WTCode']) ?>)</span>
                     </label>
-                    <?php endforeach; ?>
+                    <?php endforeach; endif; ?>
                 </div>
             </div>
 
@@ -564,13 +534,6 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
 </div>
 
 <script>
-    function mostrarRetenciones(tipo) {
-        document.getElementById('retenciones_normal').style.display = (tipo === 'contribuyente_normal') ? 'block' : 'none';
-        document.getElementById('retenciones_pequeno').style.display = (tipo === 'pequeno_contribuyente') ? 'block' : 'none';
-        // Desmarcar todos al cambiar tipo
-        document.querySelectorAll('#formTipoRetenciones input[type=checkbox]').forEach(cb => cb.checked = false);
-    }
-
     function mostrarModalAprobarPago(facturaId, facturaNumero, monto,fechaPago) {
     document.getElementById('pago_factura_id').value = facturaId;
     document.getElementById('pago_factura_numero').value = facturaNumero;

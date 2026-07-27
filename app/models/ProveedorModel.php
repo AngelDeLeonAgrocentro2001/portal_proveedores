@@ -216,5 +216,34 @@ class ProveedorModel {
             return ['orden' => [], 'lineas' => []];
         }
     }
-    
+
+    // Indica si el proveedor está clasificado como "Contabilidad" en SAP (OCRD.QryGroup9 = Properties9).
+    // Estos proveedores saltan la autorización de Compras: sus facturas entran directo a la cola de Contabilidad.
+    public function esProveedorContabilidad($cardcode) {
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+
+            $query = '
+                SELECT T0."QryGroup9" as "qrygroup9"
+                FROM "T_GT_AGROCENTRO_2016".OCRD T0
+                WHERE T0."CardCode" = ?
+            ';
+
+            $stmt = odbc_prepare($conexion, $query);
+            if (!$stmt || !odbc_execute($stmt, [$cardcode])) {
+                throw new Exception("Error ejecutando consulta: " . odbc_errormsg($conexion));
+            }
+
+            $row = odbc_fetch_array($stmt);
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            return $row && trim($row['qrygroup9'] ?? '') === 'Y';
+        } catch (Exception $e) {
+            error_log("esProveedorContabilidad - Error consultando OCRD para $cardcode: " . $e->getMessage());
+            return false;
+        }
+    }
+
 }

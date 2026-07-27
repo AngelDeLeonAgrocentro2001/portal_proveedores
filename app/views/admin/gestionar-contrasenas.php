@@ -428,7 +428,46 @@
                         <td><?= date('d/m/Y', strtotime($factura['fecha_pago_esperada'])) ?></td>
                     </tr>
                     <?php endif; ?>
+                    <?php if (!empty($factura['comentario_transporte'])): ?>
+                    <tr>
+                        <td><strong>Comentario del Transportista:</strong></td>
+                        <td><?= nl2br(htmlspecialchars($factura['comentario_transporte'])) ?></td>
+                    </tr>
+                    <?php endif; ?>
                 </table>
+
+                <?php
+                $viajesIncluidos = json_decode($factura['viajes_data'] ?? '[]', true) ?: [];
+                ?>
+                <?php if (!empty($viajesIncluidos)): ?>
+                <div style="margin-top: 20px;">
+                    <h3>🚚 Viajes Incluidos en esta Factura (<?= count($viajesIncluidos) ?>)</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Viaje</th>
+                                    <th>Fecha</th>
+                                    <th>Placa</th>
+                                    <th>Peso (TN)</th>
+                                    <th>Conductor</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($viajesIncluidos as $viaje): ?>
+                                <tr>
+                                    <td>#<?= htmlspecialchars($viaje['id'] ?? '') ?></td>
+                                    <td><?= !empty($viaje['DocDate']) ? date('d/m/Y', strtotime($viaje['DocDate'])) : '—' ?></td>
+                                    <td><?= htmlspecialchars($viaje['vehicle_plate'] ?? '—') ?></td>
+                                    <td><?= htmlspecialchars($viaje['weight'] ?? '—') ?></td>
+                                    <td><?= htmlspecialchars($viaje['name_driver'] ?? '—') ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <!-- Visualizar PDF de Factura -->
                 <?php if (!empty($factura['pdf_factura'])): ?>
@@ -646,6 +685,8 @@
             </div>
         </div>
     </div>
+
+    
 
     <script>
         let facturaActualId = null;

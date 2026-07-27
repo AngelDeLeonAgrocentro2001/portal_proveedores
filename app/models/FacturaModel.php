@@ -21,7 +21,11 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
     
     // Viajes de transporte (NUEVO)
     $viajes_transporte = isset($post['viajes_transporte']) ? trim($post['viajes_transporte']) : '';
-    
+    // Detalle completo (placa, conductor, peso, fecha) de los viajes seleccionados, y comentario del
+    // transportista al reportar la factura — solo aplica a proveedores tipo_proveedor = 'transporte'
+    $viajes_transporte_detalle = isset($post['viajes_transporte_detalle']) ? trim($post['viajes_transporte_detalle']) : '[]';
+    $comentario_transporte = trim($post['comentario_transporte'] ?? '');
+
     // Facturas adicionales (JSON)
     $facturas_adicionales = isset($post['facturas_adicionales']) ? json_decode($post['facturas_adicionales'], true) : [];
 
@@ -42,6 +46,11 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
 
     $provModel = new ProveedorModel();
     $proveedorData = $provModel->getProveedorByCardcode($cardcode);
+
+    // Proveedores clasificados como "Contabilidad" en SAP (Properties9) saltan la autorización
+    // de Compras: la factura entra directo a la cola de Contabilidad para envío a SAP.
+    $esProveedorContabilidad = $provModel->esProveedorContabilidad($cardcode);
+    $estadoInicial = $esProveedorContabilidad ? 'aprobada_compras' : 'reportada';
 
     // Verificar si el proveedor está en el grupo de doble factura
     $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM proveedores_doble_factura WHERE cardcode = ? AND activo = 1");
@@ -98,11 +107,11 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
 
     // INSERT de factura principal con id_usuario y viajes_transporte
     $stmt = $this->pdo->prepare("
-        INSERT INTO facturas 
-        (cardcode, id_usuario, numero_factura, fecha_factura_sat, fecha_emision, monto, monto_retencion, 
-         contrasena_pago, fecha_pago_esperada, fecha_inicio_credito, pdf_factura, pdf_constancia, 
-         viajes, viajes_transporte_ids, estado, ordenes_relacionadas, es_doble_factura)
-        VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reportada', ?, ?)
+        INSERT INTO facturas
+        (cardcode, id_usuario, numero_factura, fecha_factura_sat, fecha_emision, monto, monto_retencion,
+         contrasena_pago, fecha_pago_esperada, fecha_inicio_credito, pdf_factura, pdf_constancia,
+         viajes, viajes_transporte_ids, comentario_transporte, viajes_data, estado, ordenes_relacionadas, es_doble_factura)
+        VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     $stmt->execute([
@@ -119,11 +128,25 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
         $pdf_constancia,
         $viajes,
         $viajes_transporte, // NUEVO: JSON con IDs de viajes
+        $comentario_transporte,
+        $viajes_transporte_detalle, // Detalle completo de los viajes (placa, conductor, peso, fecha)
+        $estadoInicial,
         $ordenes_json,
         $es_doble_factura ? 1 : 0
     ]);
 
     $factura_id = $this->pdo->lastInsertId();
+
+    if ($esProveedorContabilidad) {
+        $stmtAuto = $this->pdo->prepare("
+            UPDATE facturas
+            SET aprobado_por_compras = 'Automático (SAP: Contabilidad)',
+                fecha_aprobacion_compras = NOW(),
+                comentarios_compras = 'Aprobación automática: proveedor clasificado como Contabilidad en SAP (Properties9), no requiere autorización de Compras.'
+            WHERE id = ?
+        ");
+        $stmtAuto->execute([$factura_id]);
+    }
 
     // Insertar facturas adicionales
     foreach ($facturas_adicionales as $adicional) {

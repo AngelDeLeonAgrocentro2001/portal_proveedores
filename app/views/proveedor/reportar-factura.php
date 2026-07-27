@@ -141,6 +141,13 @@
             <div id="viajes-error" class="alert error" style="display: none;"></div>
         </div>
         <input type="hidden" name="viajes_transporte" id="viajes_transporte_input" value="">
+        <input type="hidden" name="viajes_transporte_detalle" id="viajes_transporte_detalle_input" value="[]">
+
+        <div class="form-group" style="margin-top: 15px;">
+            <label>Comentarios sobre esta factura (opcional)</label>
+            <textarea name="comentario_transporte" rows="3" style="width:100%; padding:8px;"
+                      placeholder="Observaciones sobre los viajes, rutas, incidencias, etc."></textarea>
+        </div>
 
         <!-- Panel de depuración (solo visible en desarrollo) -->
 <div id="debug-panel" style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 6px; font-family: monospace; font-size: 12px; display: none;">
@@ -222,15 +229,24 @@
         </div>
     </div>
 </div>
+
+<div style="margin-top: 30px;">
+        <a href="index.php?controller=proveedor&action=dashboard" class="btn-secondary">← Volver al Dashboard</a>
+    </div>
 <script>
 // Variables para viajes de transporte
 let viajesSeleccionados = [];
+let viajesDisponiblesData = []; // Detalle completo (placa, conductor, peso, fecha) de los viajes cargados
 
 // Función para actualizar viajes seleccionados
 function actualizarViajesSeleccionados() {
     const checkboxes = document.querySelectorAll('.viaje-checkbox:checked');
     viajesSeleccionados = Array.from(checkboxes).map(cb => parseInt(cb.value));
     document.getElementById('viajes_transporte_input').value = JSON.stringify(viajesSeleccionados);
+
+    // Guardar el detalle completo de los viajes seleccionados para que Compras lo vea al autorizar
+    const detalleSeleccionado = viajesDisponiblesData.filter(v => viajesSeleccionados.includes(parseInt(v.id)));
+    document.getElementById('viajes_transporte_detalle_input').value = JSON.stringify(detalleSeleccionado);
 
     const contador = document.getElementById('viajes-contador');
     if (contador) {
@@ -309,12 +325,14 @@ async function cargarViajesTransporte() {
             return;
         }
         
+        viajesDisponiblesData = data.trips || [];
+
         if (!data.trips || data.trips.length === 0) {
             container.innerHTML = '<p style="text-align: center; color: #666;">📭 No hay viajes pendientes de pago para esta empresa.</p>';
             container.style.display = 'block';
             return;
         }
-        
+
         // Mostrar la lista de viajes con checkboxes
         let html = '<div style="margin-bottom: 10px;">';
         html += '<label><input type="checkbox" id="seleccionar-todos-viajes" onchange="seleccionarTodosViajes(this)"> <strong>Seleccionar todos</strong></label>';
