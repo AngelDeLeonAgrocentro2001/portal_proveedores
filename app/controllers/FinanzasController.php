@@ -32,6 +32,10 @@ class FinanzasController
             $factura_id = $_POST['factura_id'] ?? 0;
             $semana_pago = $_POST['semana_pago'] ?? '';
             $fecha_pago_custom = $_POST['fecha_pago_custom'] ?? '';
+            // Fecha exacta que la vista mostró en la opción elegida (data-fecha de <option>).
+            // Se usa tal cual para que lo que el usuario vea en el dropdown sea lo que se guarda,
+            // sin recalcularla en el servidor (eso causaba que quedara desfasada de lo mostrado).
+            $fecha_pago_calculada = $_POST['fecha_pago_calculada'] ?? '';
             $comentarios = $_POST['comentarios'] ?? '';
             $usuario = $_SESSION['user']['username'] ?? 'finanzas';
 
@@ -45,7 +49,9 @@ class FinanzasController
                     $nuevo_estado = 'confirmacion_pago';
                     $mensaje = "📅 Fecha de pago confirmada para el " . date('d/m/Y', strtotime($fecha_pago)) . ". Pendiente de aprobación por Contabilidad.";
                 } else {
-                    $fecha_pago = $this->calcularFechaPago($semana_pago);
+                    // Usar la fecha que venía en el formulario; si por algún motivo no llegó
+                    // (JS deshabilitado, etc.), se recalcula como respaldo.
+                    $fecha_pago = !empty($fecha_pago_calculada) ? $fecha_pago_calculada : $this->calcularFechaPago($semana_pago);
                     $semana_pago_db = $semana_pago;
                     $nuevo_estado = 'aprobado_para_pago';
                     $mensaje = "✅ Pago aprobado para el " . date('d/m/Y', strtotime($fecha_pago)) . ". Pendiente de registro por Contabilidad.";
@@ -340,21 +346,15 @@ class FinanzasController
     private function calcularFechaPago($semana_pago)
     {
         $hoy = new DateTime();
+        $diaSemana = (int)$hoy->format('N'); // 1=Lun ... 7=Dom
+        // Días hasta el viernes más cercano (0 si hoy ya es viernes)
+        $diasHastaEsteViernes = (5 - $diaSemana + 7) % 7;
 
         if ($semana_pago === 'este_viernes') {
-            $diaSemana = (int)$hoy->format('N');
-            if ($diaSemana <= 5) {
-                $diasHastaViernes = 5 - $diaSemana;
-                $hoy->modify("+{$diasHastaViernes} days");
-            } else {
-                $diasHastaViernes = (12 - $diaSemana) % 7;
-                $hoy->modify("+{$diasHastaViernes} days");
-            }
+            $hoy->modify("+{$diasHastaEsteViernes} days");
         } else {
-            $diaSemana = (int)$hoy->format('N');
-            $diasHastaViernes = (12 - $diaSemana) % 7;
-            if ($diasHastaViernes === 0) $diasHastaViernes = 7;
-            $hoy->modify("+{$diasHastaViernes} days");
+            // Próximo viernes = el viernes siguiente a "este viernes"
+            $hoy->modify("+" . ($diasHastaEsteViernes + 7) . " days");
         }
 
         return $hoy->format('Y-m-d');

@@ -453,11 +453,6 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i')
         color: #1a237e;
     }
 
-    .data-table th {
-        background: #f8f9fa;
-        font-weight: 600;
-    }
-
     .data-table td {
         padding: 10px 8px;
     }

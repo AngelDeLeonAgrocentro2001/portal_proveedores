@@ -16,7 +16,7 @@
         }
 
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #24643d 0%, #0D7C66 100%);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             min-height: 100vh;
             padding: 40px 20px;
@@ -83,12 +83,12 @@
 
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76,175,80,0.15);
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0D7C66 0%, #4CAF50 100%);
             color: white;
             border: none;
             padding: 12px 30px;
@@ -103,8 +103,14 @@
             transform: translateY(-2px);
         }
 
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .btn-success {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            background: linear-gradient(135deg, #0D7C66 0%, #4CAF50 100%);
             color: white;
             border: none;
             padding: 12px 24px;
@@ -146,14 +152,14 @@
 
         /* Información del proveedor */
         .proveedor-info {
-            background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+            background: linear-gradient(135deg, #F2EEE7 0%, #EBEBEB 100%);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 25px;
         }
 
         .proveedor-info h3 {
-            color: #333;
+            color: #282828;
             margin-bottom: 15px;
         }
 
@@ -170,7 +176,7 @@
         }
 
         .info-item strong {
-            color: #667eea;
+            color: #0D7C66;
         }
 
         /* Tablas */
@@ -194,13 +200,13 @@
         }
 
         .data-table th {
-            background: #f8f9fa;
+            background: #EBEBEB;
             font-weight: 600;
-            color: #495057;
+            color: #282828;
         }
 
         .data-table tbody tr:hover {
-            background: #f8f9fa;
+            background: #F2EEE7;
         }
 
         .status-disponible {
@@ -209,8 +215,8 @@
             border-radius: 20px;
             font-size: 0.75rem;
             font-weight: 600;
-            background: #d4edda;
-            color: #155724;
+            background: rgba(76,175,80,0.15);
+            color: #2e7d32;
         }
 
         .status-usada {
@@ -248,8 +254,8 @@
         }
 
         .checkbox-label:hover {
-            background: #f8f9fa;
-            border-color: #667eea;
+            background: #F2EEE7;
+            border-color: #4CAF50;
         }
 
         .checkbox-label input[type="checkbox"] {
@@ -303,7 +309,48 @@
         .loading {
             text-align: center;
             padding: 40px;
-            color: #667eea;
+            color: #0D7C66;
+        }
+
+        /* Buscador y paginación de facturas */
+        .search-facturas {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin: 15px 0;
+        }
+
+        .search-facturas input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #EBEBEB;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .search-facturas input:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76,175,80,0.15);
+        }
+
+        .paginacion {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            flex-wrap: wrap;
+        }
+
+        .paginacion button {
+            padding: 8px 18px;
+        }
+
+        .paginacion span {
+            font-weight: 600;
+            color: #282828;
         }
 
         /* Responsive */
@@ -362,11 +409,16 @@
 
             <!-- Facturas Disponibles -->
             <h2><i class="fas fa-file-invoice"></i> Facturas Disponibles para Reportar</h2>
+
+            <div class="search-facturas">
+                <input type="text" id="buscarFactura" placeholder="Buscar por serie o número DTE...">
+            </div>
+
             <div class="table-wrapper">
                 <form method="POST" id="formReporte">
                     <input type="hidden" name="cardcode" value="<?= htmlspecialchars($proveedor['cardcode']) ?>">
                     <input type="hidden" name="reportar_factura" value="1">
-                    
+
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -380,7 +432,7 @@
                                 <th>Estado</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="tablaFacturasBody">
                             <?php foreach ($facturasSAT as $f): ?>
                                 <tr>
                                     <td class="radio-group">
@@ -407,6 +459,12 @@
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+
+                    <div class="paginacion" id="paginacionFacturas">
+                        <button type="button" id="btnPagAnterior" class="btn-primary">&laquo; Anterior</button>
+                        <span id="paginaInfo"></span>
+                        <button type="button" id="btnPagSiguiente" class="btn-primary">Siguiente &raquo;</button>
+                    </div>
 
                     <!-- Campos ocultos para la factura seleccionada -->
                     <input type="hidden" name="serie" id="serie_seleccionada">
@@ -511,6 +569,76 @@
         
         return confirm(`¿Confirmar generación de contraseña para la factura ${serie} ${numero}?\n\nSe generará una contraseña y la factura quedará marcada como usada.`);
     });
+
+    // ===== Buscador y paginación de facturas disponibles (15 por página) =====
+    // Solo oculta/muestra filas de la tabla ya renderizada; no afecta el envío del formulario
+    // ni la selección de la factura (los radios siguen funcionando aunque estén ocultos).
+    (function() {
+        const tbody = document.getElementById('tablaFacturasBody');
+        if (!tbody) return;
+
+        const filas = Array.from(tbody.querySelectorAll('tr'));
+        const inputBuscar = document.getElementById('buscarFactura');
+        const btnAnterior = document.getElementById('btnPagAnterior');
+        const btnSiguiente = document.getElementById('btnPagSiguiente');
+        const paginaInfo = document.getElementById('paginaInfo');
+        const POR_PAGINA = 15;
+        let paginaActual = 1;
+
+        function datosFila(fila) {
+            const radio = fila.querySelector('input[name="numero_factura"]');
+            return {
+                serie: (radio?.dataset.serie || '').toLowerCase(),
+                numero: (radio?.dataset.numero || '').toLowerCase()
+            };
+        }
+
+        function filasFiltradas() {
+            const texto = (inputBuscar.value || '').trim().toLowerCase();
+            if (!texto) return filas;
+            return filas.filter(fila => {
+                const d = datosFila(fila);
+                return d.serie.includes(texto) || d.numero.includes(texto);
+            });
+        }
+
+        function render() {
+            const filtradas = filasFiltradas();
+            const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
+            if (paginaActual > totalPaginas) paginaActual = totalPaginas;
+            if (paginaActual < 1) paginaActual = 1;
+
+            const inicio = (paginaActual - 1) * POR_PAGINA;
+            const fin = inicio + POR_PAGINA;
+
+            filas.forEach(fila => fila.style.display = 'none');
+            filtradas.slice(inicio, fin).forEach(fila => fila.style.display = '');
+
+            paginaInfo.textContent = filtradas.length > 0
+                ? `Página ${paginaActual} de ${totalPaginas} (${filtradas.length} factura${filtradas.length === 1 ? '' : 's'})`
+                : 'No se encontraron facturas';
+
+            btnAnterior.disabled = paginaActual <= 1;
+            btnSiguiente.disabled = paginaActual >= totalPaginas;
+        }
+
+        inputBuscar.addEventListener('input', function() {
+            paginaActual = 1;
+            render();
+        });
+
+        btnAnterior.addEventListener('click', function() {
+            paginaActual--;
+            render();
+        });
+
+        btnSiguiente.addEventListener('click', function() {
+            paginaActual++;
+            render();
+        });
+
+        render();
+    })();
 </script>
 </body>
 </html>

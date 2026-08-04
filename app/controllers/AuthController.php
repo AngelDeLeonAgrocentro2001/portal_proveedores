@@ -7,6 +7,10 @@ class AuthController {
     public function login() {
         $error = null;
 
+        if (($_GET['error'] ?? '') === 'proveedor_inactivo') {
+            $error = "Este proveedor fue desactivado. Contacta al administrador si crees que esto es un error.";
+        }
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cardcode = trim($_POST['cardcode'] ?? '');
             $email    = trim($_POST['email'] ?? '');
@@ -22,7 +26,10 @@ class AuthController {
                     $_SESSION['user'] = $user;
                     
                     // Redirigir según el rol del usuario
-                    if ($user['rol'] === 'supervisor_compras') {
+                    if ($user['rol'] === 'superadmin') {
+                        // Redirigir al panel de super administrador
+                        header('Location: index.php?controller=superadmin&action=dashboard');
+                    } elseif ($user['rol'] === 'supervisor_compras') {
                         // Redirigir al panel de administración de compras
                         header('Location: index.php?controller=admin&action=gestionarContraseñas');
                     } elseif ($user['rol'] === 'supervisor_finanzas') {

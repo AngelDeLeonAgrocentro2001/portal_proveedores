@@ -1005,34 +1005,70 @@ class ContabilidadController
         $pricePerUnit = $docTotal / $totalQuantity;
 
         $documentLines = [];
+        $ordenEsMontoFijo = false; // true si alguna línea de la orden tiene Quantity=0 (contrato a monto fijo)
         foreach ($lineasOrden as $index => $linea) {
-            $quantity = (float)$linea['Quantity'];
+            $quantityOriginal = (float)$linea['Quantity'];
+            $quantity = $quantityOriginal;
             if ($quantity <= 0) $quantity = 1;
 
             $taxCode = $esPequeñoContribuyente ? 'EXE' : ($linea['TaxCode'] ?? 'IVA');
 
-            
             $lineData = [
                 "LineNum" => $index,
                 "ItemDescription" => $linea['Description'] ?? $linea['ItemDescription'] ?? 'Servicio',
                 "Quantity" => $quantity,
-                "PriceAfterVAT" => $pricePerUnit,  
+                "PriceAfterVAT" => $pricePerUnit,
                 "TaxCode" => $taxCode,
                 "U_TipoA" => "S",
                 "AccountCode" => $linea['AccountCode'] ?? '640901001',
                 "CostingCode" => $linea['CostingCode'] ?? 'D08',
                 "CostingCode2" => $linea['CostingCode2'] ?? '',
                 "CostingCode3" => $linea['CostingCode3'] ?? '',
-                "BaseEntry" => (int)$docentry,
-                "BaseLine" => (int)($linea['BaseLine'] ?? $index),
-                "BaseType" => 22,
-                "DiscountPercent" => 0  // Añadido como en tu ejemplo
+                "DiscountPercent" => 0
             ];
+
+            // Si la orden tiene una cantidad real (>0), SAP puede "dibujar" (draw) parcialmente
+            // contra ella respetando el precio que enviamos. Si es una orden de servicio con
+            // Quantity=0 (ej. contrato anual a monto fijo), SAP ignora el precio enviado y usa
+            // el total completo de la orden — por eso en ese caso NO se enlaza vía
+            // BaseEntry/BaseLine/BaseType, para que el DocTotal sea el monto real de la factura.
+            if ($quantityOriginal > 0) {
+                $lineData["BaseEntry"] = (int)$docentry;
+                $lineData["BaseLine"] = (int)($linea['BaseLine'] ?? $index);
+                $lineData["BaseType"] = 22;
+            } else {
+                $ordenEsMontoFijo = true;
+                error_log("Orden $docentry línea $index tiene Quantity=0 (orden de servicio a monto fijo): se envía SIN BaseEntry/BaseLine para que SAP respete el monto real de la factura en vez del total de la orden.");
+            }
 
             $documentLines[] = $lineData;
         }
 
-        
+        // ========== CONTROL DE SALDO PARA ÓRDENES A MONTO FIJO (Quantity=0) ==========
+        // Como estas órdenes no se enlazan vía BaseEntry, SAP no descuenta su saldo automáticamente.
+        // El portal lleva su propio control sumando lo ya facturado (enviado a SAP) contra esa orden,
+        // para no dejar pasar facturas que sobrepasen el monto total del contrato.
+        if ($ordenEsMontoFijo && !empty($orden['doctotal'])) {
+            $totalOrden = (float)$orden['doctotal'];
+            $totalYaFacturado = $this->getTotalFacturadoContraOrden($docentry, $factura_id);
+            $totalConEstaFactura = $totalYaFacturado + $docTotal;
+
+            error_log("Control de saldo orden $docentry (monto fijo): total orden=$totalOrden, ya facturado=$totalYaFacturado, con esta factura=$totalConEstaFactura");
+
+            if ($totalConEstaFactura > $totalOrden + 0.01) {
+                $this->logout_sap();
+                echo json_encode([
+                    'success' => false,
+                    'message' => "Esta factura excede el saldo disponible de la orden $docentry (contrato a monto fijo). " .
+                        "Total de la orden: Q" . number_format($totalOrden, 2) . ". " .
+                        "Ya facturado contra ella: Q" . number_format($totalYaFacturado, 2) . ". " .
+                        "Con esta factura (Q" . number_format($docTotal, 2) . ") el total sería Q" . number_format($totalConEstaFactura, 2) . "."
+                ]);
+                exit;
+            }
+        }
+
+
         $purchaseInvoice = [
             "DocType" => "dDocument_Service",
             "CardCode" => $cardCode,
@@ -1768,11 +1804,34 @@ class ContabilidadController
         }
     }
 
+    // Suma el monto de las facturas ya enviadas a SAP (o más adelante en el flujo) que referencian
+    // esta orden de compra. Se usa solo para órdenes a monto fijo (Quantity=0), donde SAP no
+    // descuenta el saldo automáticamente porque no se enlazan vía BaseEntry.
+    private function getTotalFacturadoContraOrden($docentry, $excluirFacturaId = null)
+    {
+        $sql = "
+            SELECT COALESCE(SUM(monto), 0) as total
+            FROM facturas
+            WHERE JSON_CONTAINS(ordenes_relacionadas, JSON_QUOTE(?))
+              AND estado IN ('en_sap', 'aprobado_para_pago', 'confirmacion_pago', 'pagada')
+        ";
+        $params = [(string)$docentry];
+
+        if ($excluirFacturaId) {
+            $sql .= " AND id != ?";
+            $params[] = $excluirFacturaId;
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        return (float)$stmt->fetchColumn();
+    }
+
     private function getOrdenCompraDetalles($docentry, $cardcode)
     {
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
 
             // Query para obtener cabecera y líneas de la orden de compra
             $query = "
@@ -1986,7 +2045,7 @@ class ContabilidadController
         JOIN proveedores p ON f.cardcode = p.cardcode
         WHERE f.estado IN ('aprobado_para_pago', 'confirmacion_pago', 'pagada')
             AND f.fecha_aprobacion_finanzas IS NOT NULL
-            AND f.fecha_pago_esperada BETWEEN ? AND ?
+            AND DATE(f.fecha_aprobacion_finanzas) BETWEEN ? AND ?
         ORDER BY f.fecha_aprobacion_finanzas DESC
     ");
 
@@ -2043,7 +2102,7 @@ class ContabilidadController
                 f.comentarios_finanzas LIKE '%Cambió fecha de pago%'
                 OR f.semana_pago = 'fecha_personalizada'
             )
-            AND f.fecha_pago_esperada BETWEEN ? AND ?
+            AND DATE(f.fecha_aprobacion_finanzas) BETWEEN ? AND ?
         ORDER BY f.fecha_aprobacion_finanzas DESC
     ");
 

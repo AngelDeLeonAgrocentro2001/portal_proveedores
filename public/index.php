@@ -16,7 +16,7 @@ require_once BASE_PATH . 'database/DatabaseCajas.php';
 require_once BASE_PATH . 'database/DatabaseSAP.php';
 
 // ========== NUEVO CÓDIGO: Controladores permitidos ==========
-$allowed_controllers = ['auth', 'proveedor', 'admin', 'compras', 'autorizacionProveedor', 'finanzas', 'contabilidad', 'ingresoManual'];
+$allowed_controllers = ['auth', 'proveedor', 'admin', 'compras', 'autorizacionProveedor', 'finanzas', 'contabilidad', 'ingresoManual', 'superadmin'];
 $controller = $_GET['controller'] ?? 'auth';
 
 // Validar que el controlador esté permitido

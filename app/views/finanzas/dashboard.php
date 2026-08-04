@@ -101,7 +101,9 @@ function safeDateFormat($date, $format = 'd/m/Y')
             </tr>
             <tr>
                 <td><strong>Fecha de Pago:</strong></td>
-                <td><strong style="color: #1a237e;"><?= safeDateFormat($factura['fecha_pago_esperada'] ?? null) ?></strong></td>
+                <td><strong style="color: #1a237e;">
+                    <?= safeDateFormat($factura['fecha_pago_propuesta'] ?? $factura['fecha_pago_esperada'] ?? null) ?>
+                </strong></td>
             </tr>
         </table>
 
@@ -143,10 +145,12 @@ function safeDateFormat($date, $format = 'd/m/Y')
                             $proximo_viernes_str = date('d/m/Y', $proximo_viernes_ts);
                             $fecha_min_custom   = $fecha_esperada ? date('Y-m-d', $este_viernes_ts) : date('Y-m-d');
                             ?>
-                            <option value="este_viernes">✅ Este Viernes (<?= $este_viernes_str ?>)</option>
-                            <option value="proximo_viernes">📅 Próximo Viernes (<?= $proximo_viernes_str ?>)</option>
+                            <option value="este_viernes" data-fecha="<?= date('Y-m-d', $este_viernes_ts) ?>">✅ Este Viernes (<?= $este_viernes_str ?>)</option>
+                            <option value="proximo_viernes" data-fecha="<?= date('Y-m-d', $proximo_viernes_ts) ?>">📅 Próximo Viernes (<?= $proximo_viernes_str ?>)</option>
                             <option value="custom">📅 Fecha Personalizada</option>
                         </select>
+                        <!-- Lleva exactamente la fecha mostrada arriba: el servidor la usa tal cual, sin recalcularla -->
+                        <input type="hidden" name="fecha_pago_calculada" id="fecha_pago_calculada" value="<?= date('Y-m-d', $este_viernes_ts) ?>">
                     </div>
 
                     <div id="divFechaCustom" style="display: none; margin-bottom: 15px;">
@@ -241,6 +245,11 @@ function safeDateFormat($date, $format = 'd/m/Y')
         const select = document.getElementById('semana_pago');
         const divCustom = document.getElementById('divFechaCustom');
         divCustom.style.display = select.value === 'custom' ? 'block' : 'none';
+
+        // Copiar la fecha exacta mostrada en la opción elegida (data-fecha) al campo que se envía
+        const selectedOption = select.options[select.selectedIndex];
+        document.getElementById('fecha_pago_calculada').value = selectedOption.dataset.fecha || '';
+
         actualizarTextoBoton();
     }
 
@@ -286,11 +295,12 @@ function safeDateFormat($date, $format = 'd/m/Y')
         }
     }
 
-    // Inicializar texto del botón al cargar la página
+    // Inicializar texto del botón y fecha oculta al cargar la página
     document.addEventListener('DOMContentLoaded', function() {
         const select = document.getElementById('semana_pago');
         if (select) {
             select.addEventListener('change', actualizarTextoBoton);
+            toggleFechaCustom();
             actualizarTextoBoton();
         }
     });

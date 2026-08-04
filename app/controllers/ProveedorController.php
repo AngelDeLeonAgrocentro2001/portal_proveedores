@@ -34,6 +34,13 @@ class ProveedorController
             $_SESSION['user']['rol'] = $userActualizado['rol'];
             $_SESSION['user']['nombre'] = $userActualizado['nombre'];
             $_SESSION['user']['nit'] = $userActualizado['nit'];
+        } else {
+            // getUserByCardcodeAndEmail exige p.estado = 'activo': si no encontró nada, el proveedor
+            // fue desactivado (o el registro ya no existe) después de haber iniciado sesión.
+            session_unset();
+            session_destroy();
+            header('Location: index.php?controller=auth&action=login&error=proveedor_inactivo');
+            exit;
         }
 
         $cardcode = $_SESSION['user']['cardcode'];
@@ -75,6 +82,14 @@ class ProveedorController
 
         $proveedorModel = new ProveedorModel();
         $proveedor = $proveedorModel->getProveedorByCardcode($cardcode);
+
+        if (!$proveedor || ($proveedor['estado'] ?? 'activo') !== 'activo') {
+            session_unset();
+            session_destroy();
+            header('Location: index.php?controller=auth&action=login&error=proveedor_inactivo');
+            exit;
+        }
+
         $ordenesAbiertas = $proveedorModel->getOrdenesCompraByCardcode($cardcode, 'abierta');
 
         // Verificar si el proveedor está en el grupo de doble factura

@@ -233,7 +233,7 @@ class AdminController {
             'es_supervisor' => $esSupervisor,
             'tipo' => $tipoSupervisor,
             'nombre' => $_SESSION['user']['username'] ?? ($esSupervisor ? 'Supervisor' : 'Admin'),
-            'area' => $tipoSupervisor === 'transporte' ? 'Transporte' : ($tipoSupervisor === 'material_empaque' ? 'Material/Empaque' : 'Admin')
+            'area' => $tipoSupervisor === 'transporte' ? 'Transporte' : ($tipoSupervisor === 'material_empaque' ? 'Material/Empaque' : ($tipoSupervisor === 'saci' ? 'SACI' : 'Admin'))
         ];
         
         require_once BASE_PATH . 'app/views/admin/gestionar-contrasenas.php';
