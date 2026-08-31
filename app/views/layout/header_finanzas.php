@@ -7,7 +7,13 @@
     <link rel="stylesheet" href="/portal_proveedores/public/assets/css/style.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background: #f3f4f6; min-height: 100vh; }
+        html { height: 100%; }
+        body {
+            background: #f3f4f6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
 
         .site-header {
             position: sticky; top: 0; left: 0; right: 0; width: 100%;
@@ -38,7 +44,7 @@
         .site-userbar .logout-btn:hover { background: rgba(255,255,255,0.3); }
 
         /* Estilos específicos de finanzas */
-        .finanzas-container { max-width: 1400px; margin: 24px auto; padding: 0 20px; }
+        .finanzas-container { max-width: 1400px; margin: 24px auto; padding: 0 20px; width: 100%; flex: 1 0 auto; }
         .card-pago  { background: #e8f5e9; border-left: 5px solid #0D7C66; }
         .badge-semana { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: .75rem; font-weight: bold; }
         .semana-este    { background: #4caf50; color: white; }

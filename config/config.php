@@ -27,5 +27,13 @@ define('SITE_NAME', 'Portal Proveedores Agrocentro');
 define('SSO_SECRET', 'agrosistemas_sso_2025');
 define('SSO_TTL', 300);
 
+// ========== CORREO (SMTP - Mailtrap, mismo servicio que usa agrocaja-chica) ==========
+define('SMTP_HOST', 'live.smtp.mailtrap.io');
+define('SMTP_PORT', 2525);
+define('SMTP_USERNAME', 'smtp@mailtrap.io');
+define('SMTP_PASSWORD', '76d00e0f0f6d691d8fc482d1e29ac452');
+define('MAIL_FROM_EMAIL', 'no-reply@agrocentro.site');
+define('MAIL_FROM_NAME', 'Agrocentro - Portal Proveedores');
+
 error_reporting(E_ALL);
 ini_set('display_errors', 0);

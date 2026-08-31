@@ -87,6 +87,34 @@ class SuperAdminController {
         $this->redirectDashboard();
     }
 
+    // AJAX: trae los días de crédito reales de SAP para un CardCode, usado en el formulario
+    // "Nuevo Proveedor" para autocompletar el campo en vez de digitarlos a mano. No afecta
+    // crearProveedor()/actualizarProveedor(): el campo dias_credito sigue siendo un input normal
+    // que se envía tal cual en el POST, esto solo lo rellena antes de que el usuario lo confirme.
+    public function buscarDiasCreditoSAP() {
+        header('Content-Type: application/json');
+
+        $cardcode = trim($_GET['cardcode'] ?? '');
+        if ($cardcode === '') {
+            echo json_encode(['success' => false, 'message' => 'CardCode requerido']);
+            exit;
+        }
+
+        $resultado = $this->model->getDiasCreditoSAP($cardcode);
+
+        if ($resultado === null) {
+            echo json_encode(['success' => false, 'message' => 'No se encontró ese CardCode en SAP']);
+            exit;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'cardname' => $resultado['cardname'],
+            'dias_credito' => $resultado['dias_credito']
+        ]);
+        exit;
+    }
+
     public function actualizarProveedor() {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') $this->redirectDashboard();
 

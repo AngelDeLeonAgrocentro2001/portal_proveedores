@@ -1,5 +1,36 @@
 <?php
 // app/views/proveedor/reportar-factura.php
+
+// Si el formulario se reenvía con un error de validación, esta misma vista se vuelve a
+// renderizar en la MISMA petición (no hay redirect), así que $_POST todavía tiene todo lo
+// que el proveedor ya había llenado/seleccionado. Lo usamos para rellenar los campos y no
+// obligarlo a volver a hacer todo desde cero — solo se pierden los archivos adjuntos, porque
+// el navegador nunca permite prellenar un <input type="file"> por seguridad.
+$huboError = !empty($error);
+
+// Órdenes de Compra / Entrada de Mercancía previamente seleccionadas (el campo llega como
+// ordenes[] con un solo elemento que puede traer varios DocEntry separados por coma).
+$ordenesSeleccionadasPrevias = [];
+if (!empty($_POST['ordenes'])) {
+    foreach ((array)$_POST['ordenes'] as $item) {
+        foreach (explode(',', (string)$item) as $pieza) {
+            $pieza = trim($pieza);
+            if ($pieza !== '') {
+                $ordenesSeleccionadasPrevias[] = $pieza;
+            }
+        }
+    }
+}
+
+// Facturas adicionales (doble factura) previamente agregadas — se valida que sea un JSON
+// de array real antes de reusarlo, para no confiar ciegamente en el POST.
+$facturasAdicionalesPrevias = [];
+if (!empty($_POST['facturas_adicionales'])) {
+    $decoded = json_decode($_POST['facturas_adicionales'], true);
+    if (is_array($decoded)) {
+        $facturasAdicionalesPrevias = $decoded;
+    }
+}
 ?>
 <div class="form-container">
     <h1>Reportar Nueva Factura</h1>
@@ -20,7 +51,8 @@
         <?php if ($esDobleFactura): ?>
         <div class="form-group" style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
             <label style="display: flex; align-items: center; cursor: pointer;">
-                <input type="checkbox" name="es_doble_factura" id="es_doble_factura" value="1" 
+                <input type="checkbox" name="es_doble_factura" id="es_doble_factura" value="1"
+                       <?= !empty($_POST['es_doble_factura']) ? 'checked' : '' ?>
                        onchange="toggleDobleFactura(this)">
                 <span style="margin-left: 10px; font-weight: bold;">✅ Agregar Facturas Adicionales (Cobros de otros proveedores)</span>
             </label>
@@ -39,9 +71,10 @@
                 <select name="factura_sat" id="factura_sat" class="form-select" onchange="llenarFactura(this)">
                     <option value="">-- Selecciona una factura SAT --</option>
                     <?php foreach ($facturasSAT as $f): ?>
-                    <option value="<?= htmlspecialchars($f['serie'] . ' ' . $f['numero_dte']) ?>" 
-                            data-fecha="<?= htmlspecialchars($f['fecha_emision'] ?? '') ?>" 
-                            data-monto="<?= htmlspecialchars($f['gran_total'] ?? 0) ?>">
+                    <option value="<?= htmlspecialchars($f['serie'] . ' ' . $f['numero_dte']) ?>"
+                            data-fecha="<?= htmlspecialchars($f['fecha_emision'] ?? '') ?>"
+                            data-monto="<?= htmlspecialchars($f['gran_total'] ?? 0) ?>"
+                            <?= (isset($_POST['numero_factura']) && trim($_POST['numero_factura']) === trim($f['serie'] . ' ' . $f['numero_dte'])) ? 'selected' : '' ?>>
                         <?= htmlspecialchars($f['serie'] . '-' . $f['numero_dte']) ?> 
                         | <?= date('d/m/Y', strtotime($f['fecha_emision'])) ?> 
                         | Q <?= number_format($f['gran_total'] ?? 0, 2) ?>
@@ -53,21 +86,21 @@
 
         <div class="form-group">
             <label>Número de Factura (SAT) *</label>
-            <input type="text" name="numero_factura" id="numero_factura" required>
+            <input type="text" name="numero_factura" id="numero_factura" value="<?= htmlspecialchars($_POST['numero_factura'] ?? '') ?>" required>
         </div>
 
         <div class="form-group">
             <label>Fecha de Emisión *</label>
-            <input type="date" name="fecha_emision" id="fecha_emision" required>
+            <input type="date" name="fecha_emision" id="fecha_emision" value="<?= htmlspecialchars($_POST['fecha_emision'] ?? '') ?>" required>
         </div>
 
         <div class="form-group">
             <label>Monto Total (Q) *</label>
-            <input type="number" name="monto" id="monto" step="0.01" required>
+            <input type="number" name="monto" id="monto" step="0.01" value="<?= htmlspecialchars($_POST['monto'] ?? '') ?>" required>
         </div>
 
         <!-- SECCIÓN DE FACTURAS ADICIONALES (ESTILO LIQUIDACIÓN CON FILTRO) -->
-        <div id="seccionDobleFactura" style="display: none; border: 2px solid #ff9800; padding: 20px; border-radius: 10px; margin: 20px 0; background: #fff8e1;">
+        <div id="seccionDobleFactura" style="display: <?= !empty($_POST['es_doble_factura']) ? 'block' : 'none' ?>; border: 2px solid #ff9800; padding: 20px; border-radius: 10px; margin: 20px 0; background: #fff8e1;">
             <h3 style="color: #e65100; margin-bottom: 15px;">📄 Facturas Adicionales (Otros Proveedores)</h3>
             <p style="margin-bottom: 15px;">Ingresa el NIT del proveedor para buscar sus facturas disponibles</p>
             
@@ -107,16 +140,17 @@
 
         <div class="form-group">
             <label>Retención (Q) (si aplica)</label>
-            <input type="number" name="retencion" step="0.01" value="0">
+            <input type="number" name="retencion" step="0.01" value="<?= htmlspecialchars($_POST['retencion'] ?? '0') ?>">
         </div>
 
-        <!-- Órdenes de Compra -->
+        <!-- Órdenes de Compra / Entrada de Mercancía (material de empaque) -->
+        <?php $etiquetaOrdenes = (($proveedor['tipo_proveedor'] ?? '') === 'material_empaque') ? 'Entrada de Mercancía' : 'Órdenes de Compra'; ?>
         <div class="form-group">
-            <label>Órdenes de Compra (SAP) *</label>
+            <label><?= $etiquetaOrdenes ?> (SAP) *</label>
             <button type="button" class="btn-primary" onclick="abrirModalOrdenes()" style="width:100%;">
-                Seleccionar Órdenes de Compra (<?= count($ordenesAbiertas) ?> disponibles)
+                Seleccionar <?= $etiquetaOrdenes ?> (<?= count($ordenesAbiertas) ?> disponibles)
             </button>
-            <input type="hidden" name="ordenes[]" id="ordenesSeleccionadas" value="">
+            <input type="hidden" name="ordenes[]" id="ordenesSeleccionadas" value="<?= htmlspecialchars(implode(',', $ordenesSeleccionadasPrevias)) ?>">
             <div id="ordenesSeleccionadasTexto" style="margin-top:8px; font-size:0.95rem; color:#006400;"></div>
         </div>
 
@@ -140,13 +174,13 @@
             </div>
             <div id="viajes-error" class="alert error" style="display: none;"></div>
         </div>
-        <input type="hidden" name="viajes_transporte" id="viajes_transporte_input" value="">
-        <input type="hidden" name="viajes_transporte_detalle" id="viajes_transporte_detalle_input" value="[]">
+        <input type="hidden" name="viajes_transporte" id="viajes_transporte_input" value="<?= htmlspecialchars($_POST['viajes_transporte'] ?? '') ?>">
+        <input type="hidden" name="viajes_transporte_detalle" id="viajes_transporte_detalle_input" value="<?= htmlspecialchars($_POST['viajes_transporte_detalle'] ?? '[]') ?>">
 
         <div class="form-group" style="margin-top: 15px;">
             <label>Comentarios sobre esta factura (opcional)</label>
             <textarea name="comentario_transporte" rows="3" style="width:100%; padding:8px;"
-                      placeholder="Observaciones sobre los viajes, rutas, incidencias, etc."></textarea>
+                      placeholder="Observaciones sobre los viajes, rutas, incidencias, etc."><?= htmlspecialchars($_POST['comentario_transporte'] ?? '') ?></textarea>
         </div>
 
         <!-- Panel de depuración (solo visible en desarrollo) -->
@@ -161,12 +195,17 @@
         <div class="form-group">
             <label>Factura PDF (SAT) *</label>
             <input type="file" name="pdf_factura" accept=".pdf" required>
+            <?php if ($huboError): ?>
+                <small style="color:#b45309; display:block; margin-top:4px;">⚠️ Por seguridad del navegador, el archivo no se conserva tras un error — vuelve a adjuntarlo.</small>
+            <?php endif; ?>
         </div>
 
+        <?php if (($proveedor['tipo_proveedor'] ?? '') === 'material_empaque'): ?>
         <div class="form-group">
             <label>Constancia de Recepción (opcional)</label>
             <input type="file" name="pdf_constancia" accept=".pdf">
         </div>
+        <?php endif; ?>
 
         <div class="form-group" id="pdfs_adicionales_container" style="display: none;">
             <label>PDFs de Facturas Adicionales</label>
@@ -177,23 +216,24 @@
     </form>
 </div>
 
-<!-- Modal de Órdenes de Compra -->
+<!-- Modal de Órdenes de Compra / Entrada de Mercancía (material de empaque) -->
 <div id="modalOrdenes" class="modal">
     <div class="modal-content">
         <span class="close" onclick="cerrarModalOrdenes()">&times;</span>
-        <h2>Seleccionar Órdenes de Compra (SAP)</h2>
-        <p>Selecciona una o varias órdenes:</p>
+        <h2>Seleccionar <?= $etiquetaOrdenes ?> (SAP)</h2>
+        <p>Selecciona una o varias <?= strtolower($etiquetaOrdenes) ?>:</p>
 
         <div class="ordenes-list" style="max-height:400px; overflow-y:auto;">
             <?php if (empty($ordenesAbiertas)): ?>
-                <p>No hay órdenes de compra abiertas disponibles.</p>
+                <p>No hay <?= strtolower($etiquetaOrdenes) ?> abiertas disponibles.</p>
             <?php else: ?>
                 <?php foreach ($ordenesAbiertas as $oc): ?>
                 <label class="checkbox-label">
-                    <input type="checkbox" class="orden-check" 
-                           value="<?= $oc['docentry'] ?>" 
+                    <input type="checkbox" class="orden-check"
+                           value="<?= $oc['docentry'] ?>"
                            data-numero="<?= htmlspecialchars($oc['numero_oc']) ?>"
-                           data-monto="<?= $oc['monto'] ?>">
+                           data-monto="<?= $oc['monto'] ?>"
+                           <?= in_array((string)$oc['docentry'], $ordenesSeleccionadasPrevias, true) ? 'checked' : '' ?>>
                     <strong><?= htmlspecialchars($oc['numero_oc']) ?></strong> 
                     - Q <?= number_format($oc['monto'], 2) ?> 
                     (<?= date('d/m/Y', strtotime($oc['fecha'])) ?>)
@@ -237,6 +277,25 @@
 // Variables para viajes de transporte
 let viajesSeleccionados = [];
 let viajesDisponiblesData = []; // Detalle completo (placa, conductor, peso, fecha) de los viajes cargados
+
+// Si el formulario se reenvió con error, restaurar los viajes que ya estaban marcados —
+// cargarViajesTransporte() ya sabe re-chequear los checkboxes que coincidan con
+// viajesSeleccionados una vez que la lista termine de cargar (ver más abajo en este archivo).
+<?php if (!empty($_POST['viajes_transporte'])): ?>
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        const viajesPrevios = JSON.parse(<?= json_encode($_POST['viajes_transporte'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>);
+        if (Array.isArray(viajesPrevios) && viajesPrevios.length > 0) {
+            viajesSeleccionados = viajesPrevios.map(v => parseInt(v)).filter(v => !isNaN(v));
+            if (typeof cargarViajesTransporte === 'function') {
+                cargarViajesTransporte();
+            }
+        }
+    } catch (e) {
+        console.error('No se pudo restaurar la selección de viajes:', e);
+    }
+});
+<?php endif; ?>
 
 // Función para actualizar viajes seleccionados
 function actualizarViajesSeleccionados() {
@@ -416,11 +475,20 @@ if (formReporte) {
 }
 </script>
 <script>
-let facturasAdicionales = [];
+// Si el formulario se reenvió con error, se restauran las facturas adicionales que ya se
+// habían agregado (la casilla "Agregar Facturas Adicionales" y su sección ya quedan visibles
+// vía PHP más arriba cuando corresponde).
+let facturasAdicionales = <?= json_encode(array_values($facturasAdicionalesPrevias), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 let contadorTemp = 0;
 let cachedDtesAdicional = [];
 let facturaAdicionalSeleccionada = null;
 let filterTimeout = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (facturasAdicionales.length > 0 && typeof actualizarListaFacturas === 'function') {
+        actualizarListaFacturas();
+    }
+});
 
 // Fechas para búsqueda (últimos 3 meses)
 const fechaFin = new Date().toISOString().split('T')[0];
@@ -970,9 +1038,9 @@ function confirmarSeleccionOrdenes() {
     });
 
     document.getElementById('ordenesSeleccionadas').value = valores.join(',');
-    
+
     if (texto.length > 0) {
-        document.getElementById('ordenesSeleccionadasTexto').innerHTML = 
+        document.getElementById('ordenesSeleccionadasTexto').innerHTML =
             '<strong>Seleccionadas:</strong> ' + texto.join(', ');
     } else {
         document.getElementById('ordenesSeleccionadasTexto').innerHTML = '';
@@ -980,6 +1048,15 @@ function confirmarSeleccionOrdenes() {
 
     cerrarModalOrdenes();
 }
+
+// Si el formulario se reenvió con error, las casillas ya vienen marcadas desde PHP (ver el
+// foreach de $ordenesAbiertas) — solo falta regenerar el texto "Seleccionadas:" y el valor
+// del campo oculto a partir de ellas, reusando la misma función de siempre.
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.querySelectorAll('.orden-check:checked').length > 0) {
+        confirmarSeleccionOrdenes();
+    }
+});
 
 // ==================== AUTOCOMPLETADO FACTURA SAT ====================
 function llenarFactura(select) {

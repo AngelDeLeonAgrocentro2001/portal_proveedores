@@ -1,6 +1,7 @@
 <?php
 // app/controllers/AdminController.php - VERSIÓN SIMPLIFICADA (SOLO FACTURAS)
 require_once BASE_PATH . 'app/models/FacturaModel.php';
+require_once BASE_PATH . 'app/models/ProveedorModel.php';
 
 class AdminController {
     private $pdo;
@@ -164,30 +165,45 @@ class AdminController {
             }
         }
         
-        // Buscar factura por número (CON FILTRO POR TIPO DE SUPERVISOR)
-        if (isset($_GET['buscar']) || isset($_POST['numero_factura'])) {
+        // Ver una factura específica por su id (usado por los enlaces "Ver/Gestionar" de la
+        // tabla, para no ambigüar cuando el mismo número de factura se repite — ver más abajo).
+        // Buscar por número de factura (usado por el cuadro de búsqueda) sigue funcionando igual.
+        if (isset($_GET['id']) || isset($_GET['buscar']) || isset($_POST['numero_factura'])) {
+            $facturaIdExacto = (int)($_GET['id'] ?? 0);
             $numero_factura = $_GET['buscar'] ?? $_POST['numero_factura'] ?? '';
-            
-            if (!empty($numero_factura)) {
+
+            if ($facturaIdExacto || !empty($numero_factura)) {
                 $sql = "
                     SELECT f.*, p.nombre as proveedor_nombre, p.cardcode, p.tipo_proveedor
                     FROM facturas f
                     JOIN proveedores p ON f.cardcode = p.cardcode
-                    WHERE f.numero_factura = ?
                 ";
-                
-                $params = [$numero_factura];
-                
+
+                if ($facturaIdExacto) {
+                    $sql .= " WHERE f.id = ?";
+                    $params = [$facturaIdExacto];
+                } else {
+                    $sql .= " WHERE f.numero_factura = ?";
+                    $params = [$numero_factura];
+                }
+
                 // Filtrar por tipo de supervisor
                 if ($esSupervisor && $tipoSupervisor) {
                     $sql .= " AND p.tipo_proveedor = ?";
                     $params[] = $tipoSupervisor;
                 }
-                
+
+                // El mismo número de factura puede repetirse: si se rechaza, el DTE se libera y el
+                // proveedor puede volver a reportarla, creando otra fila. Cuando se busca por número
+                // (no por id exacto) y hay varias, se toma la más reciente en vez de una al azar.
+                if (!$facturaIdExacto) {
+                    $sql .= " ORDER BY f.id DESC LIMIT 1";
+                }
+
                 $stmt = $this->pdo->prepare($sql);
                 $stmt->execute($params);
                 $factura = $stmt->fetch(PDO::FETCH_ASSOC);
-                
+
                 if ($factura) {
                     // Obtener documentos adicionales
                     $stmtDocs = $this->pdo->prepare("
@@ -199,15 +215,17 @@ class AdminController {
                     $documentos = $stmtDocs->fetchAll(PDO::FETCH_ASSOC);
                     $factura['documentos'] = $documentos;
                 } else {
-                    $error = "Factura no encontrada o no tiene permisos para verla: " . htmlspecialchars($numero_factura);
+                    $referencia = $facturaIdExacto ? "#$facturaIdExacto" : $numero_factura;
+                    $error = "Factura no encontrada o no tiene permisos para verla: " . htmlspecialchars($referencia);
                 }
             }
         }
-        
+
         // Listar últimas facturas reportadas (FILTRADAS POR TIPO)
         $sql = "
-            SELECT f.id, f.numero_factura, f.fecha_emision, f.monto, f.estado, 
+            SELECT f.id, f.numero_factura, f.fecha_emision, f.monto, f.estado,
                    f.contrasena_pago, f.fecha_inicio_credito, f.contrasena_cancelada,
+                   f.ordenes_relacionadas,
                    p.nombre as proveedor_nombre, p.cardcode, p.tipo_proveedor
             FROM facturas f
             JOIN proveedores p ON f.cardcode = p.cardcode
@@ -228,17 +246,92 @@ class AdminController {
         $stmt->execute($params);
         $ultimas_facturas = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Información del supervisor para la vista
-        $supervisor_info = [
+        // Información del usuario para el encabezado de la vista (antes se armaba como
+        // $supervisor_info, una variable que la vista nunca leía — la vista espera $usuario_info).
+        // Por ahora solo se resuelve el caso "supervisor con tipo asignado"; el caso de acceso
+        // global (IP permitida / contraseña Agrosistemas) queda con el mismo comportamiento de
+        // siempre (cae al bloque genérico de la vista), a pedido explícito.
+        $usuario_info = [
             'es_supervisor' => $esSupervisor,
+            'es_global' => false, // caso de acceso global no implementado todavía, a pedido
             'tipo' => $tipoSupervisor,
-            'nombre' => $_SESSION['user']['username'] ?? ($esSupervisor ? 'Supervisor' : 'Admin'),
-            'area' => $tipoSupervisor === 'transporte' ? 'Transporte' : ($tipoSupervisor === 'material_empaque' ? 'Material/Empaque' : ($tipoSupervisor === 'saci' ? 'SACI' : 'Admin'))
+            'nombre' => $_SESSION['user']['username'] ?? 'Supervisor',
+            // Los tipos con nombre propio (SACI, Material/Empaque) mantienen su etiqueta tal cual;
+            // el resto de tipos de proveedor (normal, estratégico, ocasional, servicios, etc.) se
+            // muestran capitalizados.
+            'area' => $tipoSupervisor === 'transporte' ? 'Transporte'
+                : ($tipoSupervisor === 'material_empaque' ? 'Material/Empaque'
+                : ($tipoSupervisor === 'saci' ? 'SACI'
+                : ($tipoSupervisor ? mb_convert_case($tipoSupervisor, MB_CASE_TITLE, 'UTF-8') : '')))
         ];
-        
+
+        // Etiqueta comparativa factura vs orden de compra / entrada de mercancía (informativa,
+        // no bloquea nada). Los proveedores material_empaque se comparan contra Entrada de
+        // Mercancía (OPDN) en vez de Orden de Compra (OPOR).
+        $proveedorModel = new ProveedorModel();
+
+        $comparacionOrden = null;
+        if ($factura) {
+            $esMaterialEmpaque = ($factura['tipo_proveedor'] ?? '') === 'material_empaque';
+            $montoOrdenes = $esMaterialEmpaque
+                ? $proveedorModel->getMontoEntradaMercanciaRelacionada($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null)
+                : $proveedorModel->getMontoOrdenesRelacionadas($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null);
+            $comparacionOrden = $this->armarComparacionOrden($factura['monto'] ?? 0, $montoOrdenes, $esMaterialEmpaque);
+        }
+
+        // Misma etiqueta pero para cada fila de la tabla "Últimas Facturas Reportadas".
+        // Una sola consulta a SAP por tipo de documento (OPOR/OPDN) para las hasta 50 facturas,
+        // en vez de una consulta por fila.
+        if (!empty($ultimas_facturas)) {
+            $facturasME = array_filter($ultimas_facturas, fn($f) => ($f['tipo_proveedor'] ?? '') === 'material_empaque');
+            $facturasOtras = array_filter($ultimas_facturas, fn($f) => ($f['tipo_proveedor'] ?? '') !== 'material_empaque');
+
+            $mapaMontosOrdenes = $proveedorModel->getMontosOrdenesBatch(array_column($facturasOtras, 'ordenes_relacionadas'));
+            $mapaMontosEntradas = $proveedorModel->getMontosEntradasMercanciaBatch(array_column($facturasME, 'ordenes_relacionadas'));
+
+            foreach ($ultimas_facturas as &$f) {
+                $esME = ($f['tipo_proveedor'] ?? '') === 'material_empaque';
+                $mapa = $esME ? $mapaMontosEntradas : $mapaMontosOrdenes;
+                $montoOrdenes = $proveedorModel->getMontoOrdenDesdeMapa($f['ordenes_relacionadas'] ?? null, $mapa);
+                $f['comparacion_orden'] = $this->armarComparacionOrden($f['monto'] ?? 0, $montoOrdenes, $esME);
+            }
+            unset($f);
+        }
+
         require_once BASE_PATH . 'app/views/admin/gestionar-contrasenas.php';
     }
-    
+
+    // Compara el monto de una factura contra el monto en SAP de su orden de compra o entrada de
+    // mercancía vinculada. Devuelve null si no hay documento vinculado o si SAP no responde (la
+    // vista simplemente no muestra la etiqueta en ese caso).
+    private function armarComparacionOrden($montoFactura, $montoOrdenes, $esMaterialEmpaque = false) {
+        if ($montoOrdenes === null) {
+            return null;
+        }
+
+        $tipoDocumento = $esMaterialEmpaque ? 'Entrada de Mercancía' : 'Orden de Compra';
+        $diferencia = round((float)$montoFactura - $montoOrdenes, 2);
+
+        if (abs($diferencia) < 0.01) {
+            $clase = 'igual';
+            $label = "Igual a la $tipoDocumento";
+        } elseif ($diferencia < 0) {
+            $clase = 'orden-mayor';
+            $label = "$tipoDocumento mayor a la Factura";
+        } else {
+            $clase = 'factura-mayor';
+            $label = "Factura mayor a la $tipoDocumento";
+        }
+
+        return [
+            'clase' => $clase,
+            'label' => $label,
+            'tipo_corto' => $esMaterialEmpaque ? 'Entrada' : 'Orden',
+            'monto_orden' => $montoOrdenes,
+            'diferencia' => abs($diferencia)
+        ];
+    }
+
     // ==================== MÉTODOS PARA GESTIÓN DE FACTURAS ====================
     
     // Obtener órdenes de compra disponibles (con verificación de tipo)
@@ -258,43 +351,55 @@ public function getOrdenesDisponibles() {
     // Verificar que el supervisor tenga permiso para este proveedor
     $esSupervisor = $this->isSupervisorCompras();
     $tipoSupervisor = $this->getTipoSupervisor();
-    
+
+    $stmtProveedor = $this->pdo->prepare("SELECT tipo_proveedor FROM proveedores WHERE cardcode = ?");
+    $stmtProveedor->execute([$cardcode]);
+    $proveedor = $stmtProveedor->fetch(PDO::FETCH_ASSOC);
+
     if ($esSupervisor && $tipoSupervisor) {
-        $stmt = $this->pdo->prepare("
-            SELECT tipo_proveedor FROM proveedores WHERE cardcode = ?
-        ");
-        $stmt->execute([$cardcode]);
-        $proveedor = $stmt->fetch(PDO::FETCH_ASSOC);
-        
         if ($proveedor && $proveedor['tipo_proveedor'] !== $tipoSupervisor) {
             echo json_encode(['success' => false, 'message' => 'No tiene permisos para este proveedor']);
             exit;
         }
     }
-    
+
+    // Los proveedores de material de empaque cambian entre Entradas de Mercancía (SAP OPDN),
+    // no Órdenes de Compra (OPOR) — misma forma de respuesta (docentry/numero_oc/fecha/monto)
+    // para que el modal "Cambiar Orden de Compra" no necesite cambios.
+    if (($proveedor['tipo_proveedor'] ?? '') === 'material_empaque') {
+        $proveedorModel = new ProveedorModel();
+        $entradas = $proveedorModel->getEntradasMercanciaFlatByCardcode($cardcode, 'abierta');
+        echo json_encode(['success' => true, 'ordenes' => $entradas]);
+        exit;
+    }
+
     try {
         // Conectar a SAP
         $sap = new DatabaseSAP();
         $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
         
+        // Mismo filtro de año que "Mis Órdenes de Compra" (ProveedorModel::getOrdenesCompraByCardcode),
+        // para que Compras y el proveedor vean exactamente el mismo conjunto de órdenes abiertas.
+        $añoActual = date('Y');
         $query = "
-            SELECT 
+            SELECT
                 \"DocEntry\" as \"docentry\",
                 \"DocNum\" as \"numero_oc\",
                 \"DocDate\" as \"fecha\",
                 \"DocTotal\" as \"monto\"
-            FROM \"T_GT_AGROCENTRO_2016\".OPOR 
+            FROM \"T_GT_AGROCENTRO_2016\".OPOR
             WHERE \"CardCode\" = ?
               AND \"DocStatus\" = 'O'
+              AND YEAR(\"DocDate\") = ?
             ORDER BY \"DocDate\" DESC
         ";
-        
+
         $stmt = odbc_prepare($conexion, $query);
         if (!$stmt) {
             throw new Exception("Error preparando consulta: " . odbc_errormsg($conexion));
         }
-        
-        if (!odbc_execute($stmt, [$cardcode])) {
+
+        if (!odbc_execute($stmt, [$cardcode, $añoActual])) {
             throw new Exception("Error ejecutando consulta: " . odbc_errormsg($conexion));
         }
         

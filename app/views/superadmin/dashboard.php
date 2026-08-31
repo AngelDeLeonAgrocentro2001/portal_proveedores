@@ -9,7 +9,7 @@ $rolesDisponibles = [
     'supervisor_finanzas'  => 'Supervisor de Finanzas',
     'contabilidad'         => 'Contabilidad',
 ];
-$tiposSupervisorDisponibles = ['transporte', 'material_empaque', 'saci', 'finanzas', 'contabilidad', 'admin'];
+$tiposSupervisorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios', 'transporte', 'material_empaque', 'saci', 'finanzas', 'contabilidad', 'admin'];
 $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios', 'transporte', 'material_empaque', 'saci'];
 ?>
 <!DOCTYPE html>
@@ -186,7 +186,8 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
             <form method="POST" action="index.php?controller=superadmin&action=crearProveedor">
                 <div class="form-group">
                     <label>CardCode (SAP) *</label>
-                    <input type="text" name="cardcode" required>
+                    <input type="text" name="cardcode" id="crear_prov_cardcode" required
+                           onblur="autocompletarDiasCreditoSAP(this.value)">
                 </div>
                 <div class="form-group">
                     <label>NIT *</label>
@@ -210,7 +211,8 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
                 </div>
                 <div class="form-group">
                     <label>Días de Crédito</label>
-                    <input type="number" name="dias_credito" value="30">
+                    <input type="number" name="dias_credito" id="crear_prov_dias_credito" value="30">
+                    <small id="crear_prov_dias_credito_status" style="display:block; margin-top:4px; color:#666;"></small>
                 </div>
                 <div class="form-group">
                     <label>Tipo de Proveedor</label>
@@ -267,7 +269,12 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
                 </div>
                 <div class="form-group">
                     <label>Días de Crédito</label>
-                    <input type="number" name="dias_credito" id="edit_prov_dias_credito">
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="number" name="dias_credito" id="edit_prov_dias_credito" style="flex:1;">
+                        <button type="button" class="btn-secondary" style="width:auto; white-space:nowrap;"
+                                onclick="actualizarDiasCreditoDesdeSAP()">🔄 Actualizar desde SAP</button>
+                    </div>
+                    <small id="edit_prov_dias_credito_status" style="display:block; margin-top:4px; color:#666;"></small>
                 </div>
                 <div class="form-group">
                     <label>Tipo de Proveedor</label>
@@ -411,9 +418,53 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
             document.getElementById('edit_prov_telefono').value = p.telefono || '';
             document.getElementById('edit_prov_email').value = p.email || '';
             document.getElementById('edit_prov_dias_credito').value = p.dias_credito || 0;
+            document.getElementById('edit_prov_dias_credito_status').textContent = '';
             document.getElementById('edit_prov_tipo_proveedor').value = p.tipo_proveedor || 'normal';
             document.getElementById('edit_prov_doble_factura').checked = !!parseInt(p.doble_factura);
             abrirModal('modalEditarProveedor');
+        }
+
+        // Trae los días de crédito reales desde SAP (Grupo de Proveedores -> ExtraDays) y los
+        // pone en el campo indicado — el campo sigue siendo editable normalmente, esto solo
+        // sugiere el valor en vez de que se digite a mano. Usado tanto en "Nuevo Proveedor"
+        // (al salir del campo CardCode) como en "Editar Proveedor" (botón "Actualizar desde SAP").
+        async function consultarDiasCreditoSAP(cardcode, inputId, statusId) {
+            const status = document.getElementById(statusId);
+            cardcode = (cardcode || '').trim();
+            if (!cardcode) {
+                status.textContent = '';
+                return;
+            }
+
+            status.textContent = '⏳ Buscando días de crédito en SAP...';
+            status.style.color = '#666';
+
+            try {
+                const response = await fetch('index.php?controller=superadmin&action=buscarDiasCreditoSAP&cardcode=' + encodeURIComponent(cardcode));
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById(inputId).value = data.dias_credito;
+                    status.textContent = `✅ ${data.dias_credito} días (SAP: ${data.cardname})`;
+                    status.style.color = '#2e7d32';
+                } else {
+                    status.textContent = `⚠️ ${data.message} — ingresa los días de crédito manualmente`;
+                    status.style.color = '#e65100';
+                }
+            } catch (error) {
+                console.error('Error al buscar días de crédito en SAP:', error);
+                status.textContent = '⚠️ No se pudo consultar SAP — ingresa los días de crédito manualmente';
+                status.style.color = '#e65100';
+            }
+        }
+
+        function autocompletarDiasCreditoSAP(cardcode) {
+            consultarDiasCreditoSAP(cardcode, 'crear_prov_dias_credito', 'crear_prov_dias_credito_status');
+        }
+
+        function actualizarDiasCreditoDesdeSAP() {
+            const cardcode = document.getElementById('edit_prov_cardcode').value;
+            consultarDiasCreditoSAP(cardcode, 'edit_prov_dias_credito', 'edit_prov_dias_credito_status');
         }
 
         function abrirModalEditarUsuario(u) {
@@ -427,12 +478,6 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
             abrirModal('modalEditarUsuario');
         }
 
-        // Cerrar modal al hacer click fuera del contenido
-        window.addEventListener('click', function(e) {
-            document.querySelectorAll('.modal').forEach(function(modal) {
-                if (e.target === modal) modal.style.display = 'none';
-            });
-        });
     </script>
 </body>
 </html>

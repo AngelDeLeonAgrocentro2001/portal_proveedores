@@ -449,12 +449,38 @@ class ContabilidadController
 
         // Retenciones habilitadas en SAP para el proveedor de la factura mostrada
         $retencionesDisponibles = [];
+        $proveedorModel = new ProveedorModel();
+
+        $comparacionOrden = null;
         if ($factura) {
             $retencionesDisponibles = $this->getRetencionesDisponibles($factura['cardcode']);
+            $esMaterialEmpaque = ($factura['tipo_proveedor'] ?? '') === 'material_empaque';
+            $montoOrdenes = $esMaterialEmpaque
+                ? $proveedorModel->getMontoEntradaMercanciaRelacionada($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null)
+                : $proveedorModel->getMontoOrdenesRelacionadas($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null);
+            $comparacionOrden = $this->armarComparacionOrden($factura['monto'] ?? 0, $montoOrdenes, $esMaterialEmpaque);
         }
 
         // Listar facturas pendientes de envío a SAP (aprobadas por Compras)
         $facturas_pendientes_sap = $this->getFacturasPendientesSAP();
+
+        // Etiqueta comparativa factura vs orden/entrada para cada fila de "Pendientes de Envío
+        // a SAP". Una sola consulta a SAP por tipo de documento, en vez de una por fila.
+        if (!empty($facturas_pendientes_sap)) {
+            $facturasME = array_filter($facturas_pendientes_sap, fn($f) => ($f['tipo_proveedor'] ?? '') === 'material_empaque');
+            $facturasOtras = array_filter($facturas_pendientes_sap, fn($f) => ($f['tipo_proveedor'] ?? '') !== 'material_empaque');
+
+            $mapaMontosOrdenes = $proveedorModel->getMontosOrdenesBatch(array_column($facturasOtras, 'ordenes_relacionadas'));
+            $mapaMontosEntradas = $proveedorModel->getMontosEntradasMercanciaBatch(array_column($facturasME, 'ordenes_relacionadas'));
+
+            foreach ($facturas_pendientes_sap as &$f) {
+                $esME = ($f['tipo_proveedor'] ?? '') === 'material_empaque';
+                $mapa = $esME ? $mapaMontosEntradas : $mapaMontosOrdenes;
+                $montoOrdenes = $proveedorModel->getMontoOrdenDesdeMapa($f['ordenes_relacionadas'] ?? null, $mapa);
+                $f['comparacion_orden'] = $this->armarComparacionOrden($f['monto'] ?? 0, $montoOrdenes, $esME);
+            }
+            unset($f);
+        }
 
         // Listar facturas en SAP (enviadas, no pagadas)
         $facturas_en_sap = $this->getFacturasEnSAP();
@@ -468,6 +494,38 @@ class ContabilidadController
         require_once BASE_PATH . 'app/views/layout/header_contabilidad.php';
         require_once BASE_PATH . 'app/views/contabilidad/dashboard.php';
         require_once BASE_PATH . 'app/views/layout/footer.php';
+    }
+
+    // Compara el monto de una factura contra el monto en SAP de su orden de compra o entrada de
+    // mercancía vinculada. Devuelve null si no hay documento vinculado o si SAP no responde (la
+    // vista simplemente no muestra la etiqueta en ese caso). Puramente informativo, no afecta
+    // el flujo de aprobación.
+    private function armarComparacionOrden($montoFactura, $montoOrdenes, $esMaterialEmpaque = false) {
+        if ($montoOrdenes === null) {
+            return null;
+        }
+
+        $tipoDocumento = $esMaterialEmpaque ? 'Entrada de Mercancía' : 'Orden de Compra';
+        $diferencia = round((float)$montoFactura - $montoOrdenes, 2);
+
+        if (abs($diferencia) < 0.01) {
+            $clase = 'igual';
+            $label = "Igual a la $tipoDocumento";
+        } elseif ($diferencia < 0) {
+            $clase = 'orden-mayor';
+            $label = "$tipoDocumento mayor a la Factura";
+        } else {
+            $clase = 'factura-mayor';
+            $label = "Factura mayor a la $tipoDocumento";
+        }
+
+        return [
+            'clase' => $clase,
+            'label' => $label,
+            'tipo_corto' => $esMaterialEmpaque ? 'Entrada' : 'Orden',
+            'monto_orden' => $montoOrdenes,
+            'diferencia' => abs($diferencia)
+        ];
     }
 
     private function getFacturaById($id)
@@ -484,11 +542,15 @@ class ContabilidadController
 
     private function getFacturaByNumero($numero_factura)
     {
+        // El mismo número de factura puede repetirse (rechazo -> proveedor la vuelve a reportar),
+        // por eso se ordena por id descendente y se toma la más reciente en vez de la primera que
+        // devuelva la BD sin orden explícito.
         $stmt = $this->pdo->prepare("
             SELECT f.*, p.nombre as proveedor_nombre, p.cardcode, p.nit, p.tipo_proveedor
             FROM facturas f
             JOIN proveedores p ON f.cardcode = p.cardcode
             WHERE f.numero_factura = ?
+            ORDER BY f.id DESC LIMIT 1
         ");
         $stmt->execute([$numero_factura]);
         return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -840,31 +902,66 @@ class ContabilidadController
             error_log("Nombre emisor encontrado en dte: $nombreEmisor");
         }
 
-        // Obtener órdenes de compra asociadas
+        // Obtener órdenes de compra (o entradas de mercancía) asociadas — puede venir vacío
+        // para facturas de Q1500 o menos, que no requieren documento vinculado (ver la regla
+        // de negocio en FacturaModel::reportarFactura()).
         $ordenes = json_decode($factura['ordenes_relacionadas'] ?? '[]', true);
+        $tieneDocumentoVinculado = !empty($ordenes);
 
-        if (empty($ordenes)) {
+        // Salvaguarda: solo las facturas de Q1500 o menos pueden ir sin documento vinculado.
+        // Si por algún motivo una factura mayor llega hasta aquí sin orden/entrada, se bloquea
+        // en vez de enviarla a SAP sin ese respaldo.
+        if (!$tieneDocumentoVinculado && (float)$factura['monto'] > 1500) {
             echo json_encode(['success' => false, 'message' => 'La factura no tiene órdenes de compra asociadas']);
             exit;
         }
 
-        // Obtener el docentry de la primera orden
-        $docentry = $ordenes[0];
+        // Los proveedores de material de empaque vinculan su factura a una Entrada de Mercancía
+        // (SAP OPDN) en vez de una Orden de Compra (OPOR). A diferencia de la orden, la entrada
+        // de mercancía NO se enlaza vía BaseEntry/BaseType al armar la factura: SAP la rechaza
+        // con "Base document type and target document type do not match" porque la factura se
+        // arma como documento de Servicio (dDocument_Service) y el OPDN es un documento de
+        // Artículos (maneja inventario real) — SAP exige que ambos tipos coincidan. Se sigue
+        // usando la cuenta contable/centro de costo real de la entrada, solo sin el enlace.
+        $esMaterialEmpaque = ($proveedor['tipo_proveedor'] ?? '') === 'material_empaque';
+        $docentry = null;
 
-        // Obtener detalles completos de la orden de compra desde SAP HANA
-        $ordenDetalles = $this->getOrdenCompraDetalles($docentry, $factura['cardcode']);
+        if ($tieneDocumentoVinculado) {
+            // Obtener el docentry del primer documento vinculado
+            $docentry = $ordenes[0];
 
-        if (!$ordenDetalles['success']) {
-            echo json_encode(['success' => false, 'message' => 'Error al obtener detalles de la orden: ' . ($ordenDetalles['error'] ?? 'Desconocido')]);
-            exit;
-        }
+            // Obtener detalles completos del documento de origen desde SAP HANA
+            $ordenDetalles = $esMaterialEmpaque
+                ? $this->getEntradaMercanciaDetalles($docentry, $factura['cardcode'])
+                : $this->getOrdenCompraDetalles($docentry, $factura['cardcode']);
 
-        $orden = $ordenDetalles['orden'];
-        $lineasOrden = $ordenDetalles['lines'];
+            if (!$ordenDetalles['success']) {
+                $etiquetaError = $esMaterialEmpaque ? 'la entrada de mercancía' : 'la orden';
+                echo json_encode(['success' => false, 'message' => "Error al obtener detalles de $etiquetaError: " . ($ordenDetalles['error'] ?? 'Desconocido')]);
+                exit;
+            }
 
-        if (empty($lineasOrden)) {
-            echo json_encode(['success' => false, 'message' => 'La orden de compra no tiene líneas de detalle']);
-            exit;
+            $orden = $ordenDetalles['orden'];
+            $lineasOrden = $ordenDetalles['lines'];
+
+            if (empty($lineasOrden)) {
+                $etiquetaError = $esMaterialEmpaque ? 'La entrada de mercancía no tiene' : 'La orden de compra no tiene';
+                echo json_encode(['success' => false, 'message' => "$etiquetaError líneas de detalle"]);
+                exit;
+            }
+        } else {
+            // Factura de Q1500 o menos sin orden/entrada vinculada: se envía a SAP como una
+            // línea de servicio estándar, SIN BaseEntry/BaseLine/BaseType — reutiliza el mismo
+            // mecanismo que ya existe más abajo para las líneas de orden con Quantity=0
+            // (contrato a monto fijo), que también se envían sin enlazar a un documento base.
+            // Los campos que faltan (AccountCode, CostingCode, etc.) toman los valores por
+            // defecto que ya usa ese mismo bloque de código para líneas sin datos de SAP.
+            $orden = null;
+            $lineasOrden = [[
+                'Quantity' => 0,
+                'Description' => 'Factura ' . $factura['numero_factura'],
+            ]];
+            error_log("Factura {$factura['id']} sin orden/entrada vinculada (monto Q{$factura['monto']} <= 1500): se envía como línea de servicio estándar sin BaseEntry.");
         }
 
         // ========== LOGIN A SAP ==========
@@ -990,34 +1087,59 @@ class ContabilidadController
         $docTotal = (float)$factura['monto'];  // Monto real de la factura
         error_log("Monto de la factura: $docTotal");
 
-        // Calcular cantidad total de las órdenes
-        $totalQuantity = 0;
+        // Una línea se enlaza a la orden (BaseEntry) solo si tiene cantidad real (>0) y no es
+        // Entrada de Mercancía de material_empaque (ver comentario más abajo, error "234103405").
+        // Todo lo demás (Quantity=0 / contrato a monto fijo, o cualquier línea de material_empaque)
+        // se envía SIN enlazar, como línea independiente.
+        $esLineaEnlazada = function ($linea) use ($esMaterialEmpaque) {
+            return ((float)$linea['Quantity']) > 0 && !$esMaterialEmpaque;
+        };
+
+        // Cantidad total SOLO de las líneas que sí se van a enlazar — su precio unitario sale de
+        // repartir el monto de la factura entre esa cantidad, como ya funcionaba.
+        $totalQuantityEnlazada = 0;
         foreach ($lineasOrden as $linea) {
-            $totalQuantity += (float)$linea['Quantity'];
+            if ($esLineaEnlazada($linea)) {
+                $totalQuantityEnlazada += (float)$linea['Quantity'];
+            }
         }
+        $pricePerUnitEnlazada = $totalQuantityEnlazada > 0 ? ($docTotal / $totalQuantityEnlazada) : 0;
 
-        // Si no hay cantidad, usar 1 por defecto
-        if ($totalQuantity <= 0) {
-            $totalQuantity = 1;
+        // Las líneas SIN enlazar no tienen cantidad para prorratear el monto — si a cada una se
+        // le pusiera el monto completo de la factura (como antes), el total enviado a SAP se
+        // multiplicaría por la cantidad de líneas sin enlazar. En vez de eso, se reparte el monto
+        // real de la factura proporcionalmente al LineTotal que cada línea tenía en la orden
+        // original, para conservar la distribución por centro de costo del contrato.
+        $totalLineTotalSinEnlazar = 0;
+        foreach ($lineasOrden as $linea) {
+            if (!$esLineaEnlazada($linea)) {
+                $totalLineTotalSinEnlazar += (float)($linea['LineTotal'] ?? 0);
+            }
         }
-
-        // Precio unitario basado en el total de la factura
-        $pricePerUnit = $docTotal / $totalQuantity;
+        $cantidadLineasSinEnlazar = count(array_filter($lineasOrden, fn($l) => !$esLineaEnlazada($l)));
 
         $documentLines = [];
-        $ordenEsMontoFijo = false; // true si alguna línea de la orden tiene Quantity=0 (contrato a monto fijo)
+        $ordenEsMontoFijo = $cantidadLineasSinEnlazar > 0; // hay al menos una línea que no se enlaza a un documento base
         foreach ($lineasOrden as $index => $linea) {
+            $lineaEnlazada = $esLineaEnlazada($linea);
             $quantityOriginal = (float)$linea['Quantity'];
-            $quantity = $quantityOriginal;
-            if ($quantity <= 0) $quantity = 1;
+            $quantity = $lineaEnlazada ? $quantityOriginal : 1;
 
             $taxCode = $esPequeñoContribuyente ? 'EXE' : ($linea['TaxCode'] ?? 'IVA');
+
+            if ($lineaEnlazada) {
+                $precioLinea = $pricePerUnitEnlazada;
+            } elseif ($totalLineTotalSinEnlazar > 0) {
+                $precioLinea = $docTotal * ((float)($linea['LineTotal'] ?? 0) / $totalLineTotalSinEnlazar);
+            } else {
+                $precioLinea = $docTotal / max($cantidadLineasSinEnlazar, 1);
+            }
 
             $lineData = [
                 "LineNum" => $index,
                 "ItemDescription" => $linea['Description'] ?? $linea['ItemDescription'] ?? 'Servicio',
                 "Quantity" => $quantity,
-                "PriceAfterVAT" => $pricePerUnit,
+                "PriceAfterVAT" => $precioLinea,
                 "TaxCode" => $taxCode,
                 "U_TipoA" => "S",
                 "AccountCode" => $linea['AccountCode'] ?? '640901001',
@@ -1027,18 +1149,19 @@ class ContabilidadController
                 "DiscountPercent" => 0
             ];
 
-            // Si la orden tiene una cantidad real (>0), SAP puede "dibujar" (draw) parcialmente
-            // contra ella respetando el precio que enviamos. Si es una orden de servicio con
-            // Quantity=0 (ej. contrato anual a monto fijo), SAP ignora el precio enviado y usa
-            // el total completo de la orden — por eso en ese caso NO se enlaza vía
-            // BaseEntry/BaseLine/BaseType, para que el DocTotal sea el monto real de la factura.
-            if ($quantityOriginal > 0) {
+            // Si la línea tiene cantidad real (>0) y no es material_empaque, SAP puede "dibujar"
+            // (draw) parcialmente contra la orden respetando el precio que enviamos. Si es una
+            // línea de servicio a monto fijo (Quantity=0) o una Entrada de Mercancía de
+            // material_empaque, no se enlaza vía BaseEntry/BaseLine/BaseType — para el caso de
+            // monto fijo, porque SAP ignoraría el precio enviado y usaría el total completo de
+            // la orden; para material_empaque, porque SAP rechaza mezclar un documento base de
+            // Artículos (OPDN) con una factura de Servicio (error "234103405").
+            if ($lineaEnlazada) {
                 $lineData["BaseEntry"] = (int)$docentry;
                 $lineData["BaseLine"] = (int)($linea['BaseLine'] ?? $index);
                 $lineData["BaseType"] = 22;
             } else {
-                $ordenEsMontoFijo = true;
-                error_log("Orden $docentry línea $index tiene Quantity=0 (orden de servicio a monto fijo): se envía SIN BaseEntry/BaseLine para que SAP respete el monto real de la factura en vez del total de la orden.");
+                error_log("Documento $docentry línea $index sin enlace BaseEntry/BaseLine (monto fijo o material_empaque): línea independiente, PriceAfterVAT=$precioLinea.");
             }
 
             $documentLines[] = $lineData;
@@ -1069,10 +1192,16 @@ class ContabilidadController
         }
 
 
+        // Tipo de documento fiscal (UDF U_F_Tipo en el header) — sin esto, la validación de SAP
+        // para Pequeño Contribuyente ("NIT Pequeño Contribuyente debe ser Impuesto: EXENTO")
+        // rechaza el envío aunque las líneas ya tengan TaxCode=EXE. Mismo mapeo que usa el
+        // proyecto hermano agrocaja-chica para estos dos casos.
+        $tipoDocumentoFiscal = $esPequeñoContribuyente ? 'FP' : 'FN';
+
         $purchaseInvoice = [
             "DocType" => "dDocument_Service",
             "CardCode" => $cardCode,
-            "U_CODIGO" => $cardCode, 
+            "U_CODIGO" => $cardCode,
             "DocDate" => $docDate,
             "TaxDate" => $taxDate,
             "DocDueDate" => $docDueDate,
@@ -1081,6 +1210,7 @@ class ContabilidadController
             "U_NIT" => $nitProveedor,
             "U_NOMBRE" => $nombreEmisor,
             "U_DIRECCI" => $proveedor['direccion'] ?? 'Ciudad de Guatemala',  // Dirección por defecto
+            "U_F_Tipo" => $tipoDocumentoFiscal,
             "Series" => 82,  // ← CAMBIADO a 653 según tu ejemplo (antes era 82)
             "NumAtCard" => $factura['numero_factura'] . '-' . $factura_id,  // Formato como en ejemplo
             "DocCurrency" => "QTZ",
@@ -1180,16 +1310,29 @@ class ContabilidadController
 
         $sapResponseJson = json_encode($sapResponse);
 
-        if ($stmt->execute([
-            $usuario,
-            $comprobante_sap,
-            $docEntry,
-            $docNum,
-            $sapResponseJson,
-            $usuario,
-            $observaciones,
-            $factura_id
-        ])) {
+        // SAP ya confirmó la creación del documento (HTTP 201) — a partir de aquí SAP es la
+        // fuente de verdad. Si este UPDATE local falla por cualquier motivo (columna muy chica,
+        // caída de conexión, etc.) no debe verse como un error fatal sin capturar: la factura
+        // igual quedaría "creada en SAP" con nadie enterado localmente, con el riesgo real de que
+        // alguien la reenvíe y quede duplicada en SAP. Se atrapa la excepción y se avisa con el
+        // DocEntry/DocNum real para poder reconciliar el registro a mano si hace falta.
+        $updateOk = false;
+        try {
+            $updateOk = $stmt->execute([
+                $usuario,
+                $comprobante_sap,
+                $docEntry,
+                $docNum,
+                $sapResponseJson,
+                $usuario,
+                $observaciones,
+                $factura_id
+            ]);
+        } catch (PDOException $e) {
+            error_log("enviarSAP - SAP confirmó DocEntry=$docEntry DocNum=$docNum pero el UPDATE local falló: " . $e->getMessage());
+        }
+
+        if ($updateOk) {
             echo json_encode([
                 'success' => true,
                 'message' => 'Factura enviada a SAP correctamente. Documento SAP #' . $docNum,
@@ -1198,9 +1341,14 @@ class ContabilidadController
                 'payload' => $purchaseInvoice
             ]);
         } else {
+            // SAP ya tiene el documento (no es un error de envío) — solo falló guardar la
+            // referencia en el portal. No reintentar el envío, para no duplicarlo en SAP;
+            // hay que actualizar el registro local a mano con estos datos.
             echo json_encode([
                 'success' => false,
-                'message' => 'Factura creada en SAP pero hubo error al actualizar el registro local',
+                'message' => "IMPORTANTE: la factura SÍ se creó en SAP (Documento #$docNum, DocEntry $docEntry) pero hubo un error al guardar la referencia en el portal. No reenvíes esta factura — avisa para reconciliar el registro manualmente con estos datos.",
+                'docEntry' => $docEntry,
+                'docNum' => $docNum,
                 'payload' => $purchaseInvoice
             ]);
         }
@@ -1877,7 +2025,14 @@ class ContabilidadController
                 // Limpiar y convertir encoding
                 $itemCode = trim($row['itemcode'] ?? '');
                 $description = mb_convert_encoding(trim($row['description'] ?? ''), 'UTF-8', 'auto');
-                $quantity = (float)($row['quantity'] ?? 1);
+                // Cantidad REAL de SAP, sin forzar — enviarSAP() necesita ver el 0 verdadero para
+                // decidir si esta línea debe enlazarse a la orden (BaseEntry) o no. Antes se forzaba
+                // aquí mismo a 1, lo que hacía que enviarSAP() nunca detectara las líneas de órdenes
+                // de servicio a monto fijo (Quantity=0) e intentara enlazarlas de todas formas —
+                // incluyendo líneas que SAP ya tiene cerradas (LineStatus='C'), lo que SAP rechaza
+                // con "one of the base documents has already been closed".
+                $quantityReal = (float)($row['quantity'] ?? 0);
+                $quantityParaTotal = $quantityReal > 0 ? $quantityReal : 1; // solo para el fallback de LineTotal
                 $price = (float)($row['price'] ?? 0);
                 $lineTotal = (float)($row['linetotal'] ?? 0);
                 $taxCode = trim($row['taxcode'] ?? 'IVA');
@@ -1890,12 +2045,6 @@ class ContabilidadController
                 if (empty($itemCode)) {
                     $itemCode = 'SERV-' . ($lineNum + 1);
                     error_log("getOrdenCompraDetalles - ItemCode vacío, usando: $itemCode");
-                }
-
-                // Si quantity es 0, usar 1 para evitar errores
-                if ($quantity <= 0) {
-                    $quantity = 1;
-                    error_log("getOrdenCompraDetalles - Quantity 0, cambiando a 1 para línea $lineNum");
                 }
 
                 // Datos de cabecera (solo del primer registro)
@@ -1916,9 +2065,9 @@ class ContabilidadController
                     'LineNum' => $lineNum,
                     'ItemCode' => $itemCode,
                     'Description' => $description ?: 'Sin descripción',
-                    'Quantity' => $quantity,
+                    'Quantity' => $quantityReal,
                     'Price' => $price,
-                    'LineTotal' => $lineTotal > 0 ? $lineTotal : ($price * $quantity),
+                    'LineTotal' => $lineTotal > 0 ? $lineTotal : ($price * $quantityParaTotal),
                     'TaxCode' => $taxCode,
                     'AccountCode' => $acctCode,
                     'CostingCode' => $costingCode,
@@ -1950,6 +2099,134 @@ class ContabilidadController
             ];
         } catch (Exception $e) {
             error_log("Error en getOrdenCompraDetalles: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    // Igual que getOrdenCompraDetalles() pero para Entrada de Mercancía (SAP Goods Receipt PO,
+    // OPDN/PDN1) — usado para proveedores tipo material_empaque, cuya factura queda vinculada
+    // a una entrada de mercancía en vez de una orden de compra. Devuelve exactamente la misma
+    // forma (encabezado 'orden' + 'lines') para que enviarSAP() no tenga que distinguir el
+    // origen al armar las líneas del documento, solo el BaseType final.
+    private function getEntradaMercanciaDetalles($docentry, $cardcode)
+    {
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+
+            $query = "
+            SELECT
+                T0.\"DocEntry\" as \"docentry\",
+                T0.\"DocNum\" as \"docnum\",
+                T0.\"CardCode\" as \"cardcode\",
+                T0.\"CardName\" as \"cardname\",
+                T0.\"DocDate\" as \"docdate\",
+                T0.\"DocTotal\" as \"doctotal\",
+                T0.\"Series\" as \"series\",
+                T1.\"LineNum\" as \"linenum\",
+                T1.\"ItemCode\" as \"itemcode\",
+                T1.\"Dscription\" as \"description\",
+                T1.\"Quantity\" as \"quantity\",
+                T1.\"Price\" as \"price\",
+                T1.\"LineTotal\" as \"linetotal\",
+                T1.\"TaxCode\" as \"taxcode\",
+                T1.\"AcctCode\" as \"acctcode\",
+                T1.\"OcrCode\" as \"costingcode\",
+                T1.\"OcrCode2\" as \"costingcode2\",
+                T1.\"OcrCode3\" as \"costingcode3\"
+            FROM \"T_GT_AGROCENTRO_2016\".OPDN T0
+            INNER JOIN \"T_GT_AGROCENTRO_2016\".PDN1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+            WHERE T0.\"DocEntry\" = ? AND T0.\"CardCode\" = ?
+            ORDER BY T1.\"LineNum\"
+        ";
+
+            $stmt = odbc_prepare($conexion, $query);
+            if (!$stmt) {
+                throw new Exception("Error preparando consulta: " . odbc_errormsg($conexion));
+            }
+
+            if (!odbc_execute($stmt, [$docentry, $cardcode])) {
+                throw new Exception("Error ejecutando consulta: " . odbc_errormsg($conexion));
+            }
+
+            $ordenData = null;
+            $documentLines = [];
+            $lineNum = 0;
+
+            while ($row = odbc_fetch_array($stmt)) {
+                $itemCode = trim($row['itemcode'] ?? '');
+                $description = mb_convert_encoding(trim($row['description'] ?? ''), 'UTF-8', 'auto');
+                // Cantidad REAL de SAP, sin forzar — ver el comentario equivalente en
+                // getOrdenCompraDetalles(): enviarSAP() necesita el 0 verdadero para decidir si
+                // enlaza la línea a la entrada de mercancía o no.
+                $quantityReal = (float)($row['quantity'] ?? 0);
+                $quantityParaTotal = $quantityReal > 0 ? $quantityReal : 1; // solo para el fallback de LineTotal
+                $price = (float)($row['price'] ?? 0);
+                $lineTotal = (float)($row['linetotal'] ?? 0);
+                $taxCode = trim($row['taxcode'] ?? 'IVA');
+                $acctCode = trim($row['acctcode'] ?? '611001001');
+                $costingCode = trim($row['costingcode'] ?? '');
+                $costingCode2 = trim($row['costingcode2'] ?? '');
+                $costingCode3 = trim($row['costingcode3'] ?? '');
+
+                if (empty($itemCode)) {
+                    $itemCode = 'SERV-' . ($lineNum + 1);
+                    error_log("getEntradaMercanciaDetalles - ItemCode vacío, usando: $itemCode");
+                }
+
+                if ($ordenData === null) {
+                    $ordenData = [
+                        'docentry' => $row['docentry'] ?? null,
+                        'docnum' => $row['docnum'] ?? null,
+                        'cardcode' => $row['cardcode'] ?? null,
+                        'cardname' => mb_convert_encoding($row['cardname'] ?? '', 'UTF-8', 'auto'),
+                        'docdate' => $row['docdate'] ?? date('Y-m-d'),
+                        'doctotal' => (float)($row['doctotal'] ?? 0),
+                        'series' => $row['series'] ?? null
+                    ];
+                }
+
+                $documentLines[] = [
+                    'LineNum' => $lineNum,
+                    'ItemCode' => $itemCode,
+                    'Description' => $description ?: 'Sin descripción',
+                    'Quantity' => $quantityReal,
+                    'Price' => $price,
+                    'LineTotal' => $lineTotal > 0 ? $lineTotal : ($price * $quantityParaTotal),
+                    'TaxCode' => $taxCode,
+                    'AccountCode' => $acctCode,
+                    'CostingCode' => $costingCode,
+                    'CostingCode2' => $costingCode2,
+                    'CostingCode3' => $costingCode3,
+                    'BaseEntry' => (int)$docentry,
+                    'BaseLine' => (int)($row['linenum'] ?? 0),
+                    'BaseType' => 20
+                ];
+                $lineNum++;
+            }
+
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            if ($ordenData === null) {
+                return [
+                    'success' => false,
+                    'error' => "No se encontró la entrada de mercancía con DocEntry: $docentry"
+                ];
+            }
+
+            error_log("getEntradaMercanciaDetalles - Éxito: " . count($documentLines) . " líneas obtenidas");
+
+            return [
+                'success' => true,
+                'orden' => $ordenData,
+                'lines' => $documentLines
+            ];
+        } catch (Exception $e) {
+            error_log("Error en getEntradaMercanciaDetalles: " . $e->getMessage());
             return [
                 'success' => false,
                 'error' => $e->getMessage()

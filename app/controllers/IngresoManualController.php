@@ -36,8 +36,9 @@ class IngresoManualController {
                     // Cargar facturas SAT disponibles del proveedor
                     $facturasSAT = $this->getFacturasSATDisponibles($proveedor['nit']);
                     
-                    // Cargar órdenes de compra abiertas
-                    $ordenesAbiertas = $proveedorModel->getOrdenesCompraByCardcode($cardcode_busqueda, 'abierta');
+                    // Cargar órdenes de compra abiertas (usar el CardCode canónico del proveedor,
+                    // no el texto ingresado, porque SAP HANA distingue mayúsculas/minúsculas)
+                    $ordenesAbiertas = $proveedorModel->getOrdenesCompraByCardcode($proveedor['cardcode'], 'abierta');
                 }
             }
         }
@@ -62,7 +63,8 @@ class IngresoManualController {
             if (empty($cardcode) || empty($numero_factura) || $monto <= 0) {
                 $error = "Faltan datos obligatorios";
                 error_log("ERROR: Datos incompletos");
-            } elseif (empty($ordenes_seleccionadas)) {
+            } elseif ($monto > 1500 && empty($ordenes_seleccionadas)) {
+                // Facturas de Q1500 o menos no requieren Orden de Compra vinculada
                 $error = "Debe seleccionar al menos una Orden de Compra";
                 error_log("ERROR: Sin órdenes seleccionadas");
             } else {
@@ -131,7 +133,7 @@ class IngresoManualController {
                 $proveedor = $proveedorModel->getProveedorByCardcode($cardcode);
                 if ($proveedor) {
                     $facturasSAT = $this->getFacturasSATDisponibles($proveedor['nit']);
-                    $ordenesAbiertas = $proveedorModel->getOrdenesCompraByCardcode($cardcode, 'abierta');
+                    $ordenesAbiertas = $proveedorModel->getOrdenesCompraByCardcode($proveedor['cardcode'], 'abierta');
                     $cardcode_busqueda = $cardcode;
                 }
             }
@@ -355,9 +357,9 @@ class IngresoManualController {
         
         // Obtener facturas SAT disponibles
         $facturasSAT = $this->getFacturasSATDisponibles($proveedor['nit']);
-        
-        // Obtener órdenes de compra abiertas
-        $ordenesAbiertas = $proveedorModel->getOrdenesCompraByCardcode($cardcode, 'abierta');
+
+        // Obtener órdenes de compra abiertas (CardCode canónico, no el escrito por el usuario)
+        $ordenesAbiertas = $proveedorModel->getOrdenesCompraByCardcode($proveedor['cardcode'], 'abierta');
         
         echo json_encode([
             'success' => true,

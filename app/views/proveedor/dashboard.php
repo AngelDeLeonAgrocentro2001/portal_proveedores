@@ -20,7 +20,7 @@ $mostrarResumen = in_array($rol, ['admin', 'consultas']);
             Código: <?= htmlspecialchars($_SESSION['user']['cardcode']) ?> | NIT: <?= $nit ?>
         </p>
         <small>Rol: <strong><?= ucfirst(str_replace('_', ' ', $rol)) ?></strong></small></br>
-        <small>Dias Credito: 30</small>
+        <small>Días Crédito: <?= (int)($diasCredito ?? 0) ?></small>
 
     </div>
 

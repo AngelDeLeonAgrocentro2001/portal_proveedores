@@ -52,6 +52,47 @@ public function login($cardcode, $email, $password) {
         return false;
     }
 
+    // Login para personal interno (Super Admin, Contabilidad, Finanzas, Compras/SACI/Material
+    // Empaque/Transporte): solo correo y contraseña, sin CardCode. No modifica login() ni su flujo.
+    public function loginStaff($email, $password) {
+        $rolesStaff = ['superadmin', 'contabilidad', 'supervisor_finanzas', 'supervisor_compras'];
+
+        $stmt = $this->pdo->prepare("
+            SELECT u.id, u.cardcode, u.email, u.username, u.rol, u.password,
+                   u.tipo_supervisor, u.area,
+                   p.nombre, p.nit, p.dias_credito, p.tipo_proveedor
+            FROM usuarios u
+            LEFT JOIN proveedores p ON u.cardcode = p.cardcode
+            WHERE u.email = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($user && password_verify($password, $user['password']) && in_array($user['rol'], $rolesStaff, true)) {
+            if ($user['rol'] === 'supervisor_compras' && empty($user['tipo_supervisor'])) {
+                error_log("Staff supervisor sin tipo asignado: " . $user['username']);
+                return false;
+            }
+
+            return [
+                'id' => $user['id'],
+                'cardcode' => $user['cardcode'],
+                'email' => $user['email'],
+                'username' => $user['username'],
+                'rol' => $user['rol'],
+                'tipo_supervisor' => $user['tipo_supervisor'] ?? null,
+                'area' => $user['area'] ?? null,
+                'nombre' => $user['nombre'] ?? $user['username'],
+                'nit' => $user['nit'] ?? '',
+                'dias_credito' => $user['dias_credito'] ?? 30,
+                'tipo_proveedor' => $user['tipo_proveedor'] ?? 'normal'
+            ];
+        }
+
+        return false;
+    }
+
     public function getUserByEmail($email) {
         $stmt = $this->pdo->prepare("
             SELECT u.id, u.cardcode, u.email, u.username, u.rol,

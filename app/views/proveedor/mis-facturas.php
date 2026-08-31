@@ -1,4 +1,7 @@
 <div class="page-container">
+    <div style="margin-top: 30px;">
+        <a href="index.php?controller=proveedor&action=dashboard" class="btn-secondary">← Volver al Dashboard</a>
+    </div>
     <h1>Mis Facturas Reportadas</h1>
 
     <!-- Filtros -->
@@ -66,8 +69,12 @@
                         <td><?= !empty($f['fecha_pago_esperada']) ? date('d/m/Y', strtotime($f['fecha_pago_esperada'])) : '—' ?></td>
 
                         <!-- Acciones (archivos) -->
+                        <?php
+                        $ordenesFila = json_decode($f['ordenes_relacionadas'] ?? '[]', true) ?: [];
+                        $docentryFila = $ordenesFila[0] ?? '';
+                        ?>
                         <td>
-                            <a href="#" onclick="verArchivos(<?= $f['id'] ?>, '<?= htmlspecialchars($f['numero_factura']) ?>')" class="btn-small">Archivos</a>
+                            <a href="#" onclick="verArchivos(<?= $f['id'] ?>, '<?= htmlspecialchars($f['numero_factura']) ?>', <?= !empty($f['pdf_retencion_iva']) ? 'true' : 'false' ?>, <?= !empty($f['pdf_retencion_isr']) ? 'true' : 'false' ?>, '<?= htmlspecialchars($docentryFila) ?>')" class="btn-small">Archivos</a>
                         </td>
                         
                         <!-- Tracking - CORREGIDO: usar $f['id'] en lugar de $factura['id'] -->
@@ -94,23 +101,73 @@
 </div>
 
 <script>
-    function verArchivos(id, numeroFactura) {
+    function verArchivos(id, numeroFactura, tieneRetencionIva, tieneRetencionIsr, docentry) {
         document.getElementById('modalFacturaNum').textContent = numeroFactura;
 
         let html = `
-        <p><strong>Factura PDF:</strong> 
+        <p><strong>Factura PDF:</strong>
             <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=factura" target="_blank" class="btn-small">Descargar Factura</a>
         </p>
-        <p><strong>Orden de Compra PDF:</strong> 
-            <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=orden" target="_blank" class="btn-small">Descargar Orden</a>
-        </p>
-        <p><strong>Constancia (si aplica):</strong> 
+        <p><strong>Constancia (si aplica):</strong>
             <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=constancia" target="_blank" class="btn-small">Descargar Constancia</a>
         </p>
         `;
 
+        if (docentry) {
+            html += `
+        <p><strong>Orden de Compra PDF:</strong>
+            <a href="index.php?controller=proveedor&action=pdfOrdenCompra&docentry=${docentry}" target="_blank" class="btn-small">Descargar Orden</a>
+        </p>
+            `;
+        }
+
+        if (tieneRetencionIva) {
+            html += `
+        <p><strong>Constancia Retención IVA:</strong>
+            <a href="index.php?controller=proveedor&action=descargarRetencionIVA&id=${id}&modo=ver" target="_blank" class="btn-small">👁️ Ver</a>
+            <a href="index.php?controller=proveedor&action=descargarRetencionIVA&id=${id}" class="btn-small">⬇️ Descargar</a>
+            <button type="button" class="btn-small" onclick="enviarRetencionCorreo(${id}, 'iva', this)">📧 Enviar a mi correo</button>
+        </p>
+            `;
+        }
+
+        if (tieneRetencionIsr) {
+            html += `
+        <p><strong>Constancia Retención ISR:</strong>
+            <a href="index.php?controller=proveedor&action=descargarRetencionISR&id=${id}&modo=ver" target="_blank" class="btn-small">👁️ Ver</a>
+            <a href="index.php?controller=proveedor&action=descargarRetencionISR&id=${id}" class="btn-small">⬇️ Descargar</a>
+            <button type="button" class="btn-small" onclick="enviarRetencionCorreo(${id}, 'isr', this)">📧 Enviar a mi correo</button>
+        </p>
+            `;
+        }
+
         document.getElementById('contenidoArchivos').innerHTML = html;
         document.getElementById('modalArchivos').style.display = 'flex';
+    }
+
+    function enviarRetencionCorreo(id, tipo, boton) {
+        const textoOriginal = boton.textContent;
+        boton.disabled = true;
+        boton.textContent = 'Enviando...';
+
+        const datos = new URLSearchParams({ id: id, tipo: tipo });
+
+        fetch('index.php?controller=proveedor&action=enviarRetencionPorCorreo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: datos.toString()
+        })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.message || (data.success ? 'Correo enviado' : 'No se pudo enviar el correo'));
+            })
+            .catch(() => {
+                alert('Error de conexión al intentar enviar el correo');
+            })
+            .finally(() => {
+                boton.disabled = false;
+                boton.textContent = textoOriginal;
+            });
     }
 
     function cerrarModal() {

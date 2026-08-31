@@ -1,6 +1,7 @@
 <?php
 // app/controllers/FinanzasController.php
 require_once BASE_PATH . 'app/models/FacturaModel.php';
+require_once BASE_PATH . 'app/models/ProveedorModel.php';
 
 class FinanzasController
 {
@@ -229,8 +230,39 @@ class FinanzasController
             }
         }
 
+        // Etiqueta comparativa factura vs orden de compra (solo informativa, no bloquea nada)
+        $proveedorModel = new ProveedorModel();
+
+        $comparacionOrden = null;
+        if ($factura) {
+            $esMaterialEmpaque = ($factura['tipo_proveedor'] ?? '') === 'material_empaque';
+            $montoOrdenes = $esMaterialEmpaque
+                ? $proveedorModel->getMontoEntradaMercanciaRelacionada($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null)
+                : $proveedorModel->getMontoOrdenesRelacionadas($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null);
+            $comparacionOrden = $this->armarComparacionOrden($factura['monto'] ?? 0, $montoOrdenes, $esMaterialEmpaque);
+        }
+
         // Obtener facturas pendientes con filtro de semana (solo en_sap y confirmacion_pago)
         $facturas_pendientes = $this->getFacturasPendientes($filtro_semana);
+
+        // Etiqueta comparativa factura vs orden/entrada para cada fila de "Facturas Pendientes
+        // de Autorización". Una sola consulta a SAP por tipo de documento, no una por fila.
+        if (!empty($facturas_pendientes)) {
+            $facturasME = array_filter($facturas_pendientes, fn($f) => ($f['tipo_proveedor'] ?? '') === 'material_empaque');
+            $facturasOtras = array_filter($facturas_pendientes, fn($f) => ($f['tipo_proveedor'] ?? '') !== 'material_empaque');
+
+            $mapaMontosOrdenes = $proveedorModel->getMontosOrdenesBatch(array_column($facturasOtras, 'ordenes_relacionadas'));
+            $mapaMontosEntradas = $proveedorModel->getMontosEntradasMercanciaBatch(array_column($facturasME, 'ordenes_relacionadas'));
+
+            foreach ($facturas_pendientes as &$f) {
+                $esME = ($f['tipo_proveedor'] ?? '') === 'material_empaque';
+                $mapa = $esME ? $mapaMontosEntradas : $mapaMontosOrdenes;
+                $montoOrdenes = $proveedorModel->getMontoOrdenDesdeMapa($f['ordenes_relacionadas'] ?? null, $mapa);
+                $f['comparacion_orden'] = $this->armarComparacionOrden($f['monto'] ?? 0, $montoOrdenes, $esME);
+            }
+            unset($f);
+        }
+
         $facturas_aprobadas = $this->getFacturasAprobadas();
 
         // Calcular estadísticas de semanas
@@ -360,6 +392,38 @@ class FinanzasController
         return $hoy->format('Y-m-d');
     }
 
+    // Compara el monto de una factura contra el monto en SAP de su orden de compra o entrada de
+    // mercancía vinculada. Devuelve null si no hay documento vinculado o si SAP no responde (la
+    // vista simplemente no muestra la etiqueta en ese caso). Puramente informativo, no afecta
+    // el flujo de aprobación.
+    private function armarComparacionOrden($montoFactura, $montoOrdenes, $esMaterialEmpaque = false) {
+        if ($montoOrdenes === null) {
+            return null;
+        }
+
+        $tipoDocumento = $esMaterialEmpaque ? 'Entrada de Mercancía' : 'Orden de Compra';
+        $diferencia = round((float)$montoFactura - $montoOrdenes, 2);
+
+        if (abs($diferencia) < 0.01) {
+            $clase = 'igual';
+            $label = "Igual a la $tipoDocumento";
+        } elseif ($diferencia < 0) {
+            $clase = 'orden-mayor';
+            $label = "$tipoDocumento mayor a la Factura";
+        } else {
+            $clase = 'factura-mayor';
+            $label = "Factura mayor a la $tipoDocumento";
+        }
+
+        return [
+            'clase' => $clase,
+            'label' => $label,
+            'tipo_corto' => $esMaterialEmpaque ? 'Entrada' : 'Orden',
+            'monto_orden' => $montoOrdenes,
+            'diferencia' => abs($diferencia)
+        ];
+    }
+
     private function getFacturaById($id)
     {
         $stmt = $this->pdo->prepare("
@@ -374,11 +438,15 @@ class FinanzasController
 
     private function getFacturaByNumero($numero_factura)
     {
+        // El mismo número de factura puede repetirse (rechazo -> proveedor la vuelve a reportar),
+        // por eso se ordena por id descendente y se toma la más reciente en vez de la primera que
+        // devuelva la BD sin orden explícito.
         $stmt = $this->pdo->prepare("
             SELECT f.*, p.nombre as proveedor_nombre, p.cardcode, p.nit, p.tipo_proveedor
             FROM facturas f
             JOIN proveedores p ON f.cardcode = p.cardcode
             WHERE f.numero_factura = ?
+            ORDER BY f.id DESC LIMIT 1
         ");
         $stmt->execute([$numero_factura]);
         return $stmt->fetch(PDO::FETCH_ASSOC);

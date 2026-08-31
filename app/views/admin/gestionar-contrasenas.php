@@ -11,12 +11,28 @@
     <link rel="stylesheet" href="/portal_proveedores/public/assets/css/style.css">
     <style>
         .admin-header {
-            background: #1a1a2e;
+            background: linear-gradient(135deg, var(--dark-bg) 0%, #16301f 100%);
             color: white;
-            padding: 15px 20px;
+            padding: 16px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            border-bottom: 3px solid var(--green-bright);
+        }
+
+        .admin-header h1 {
+            margin: 0;
+            font-size: 1.3rem;
+        }
+
+        .admin-header a {
+            transition: var(--transition);
+        }
+
+        .admin-header a:hover {
+            opacity: 0.8;
         }
 
         .admin-container {
@@ -26,35 +42,40 @@
         }
 
         .search-box {
-            background: white;
+            background: var(--white);
             padding: 25px;
-            border-radius: 10px;
+            border-radius: var(--radius-md);
             margin-bottom: 30px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--gray-light);
+        }
+
+        .search-box h2 {
+            margin-top: 0;
         }
 
         .factura-detalle {
-            background: #f8f9fa;
+            background: var(--cream);
             padding: 20px;
-            border-radius: 10px;
+            border-radius: var(--radius-md);
             margin-bottom: 30px;
-            border-left: 5px solid #006400;
+            border-left: 5px solid var(--primary);
         }
 
         .contrasena-actual {
             font-family: monospace;
             font-size: 1.2rem;
-            background: #e9ecef;
+            background: var(--gray-light);
             padding: 10px;
-            border-radius: 5px;
+            border-radius: var(--radius-sm);
         }
 
         .contrasena-cancelada {
-            background: #f8d7da;
-            color: #721c24;
+            background: #fce4ec;
+            color: #c62828;
             padding: 10px;
-            border-radius: 5px;
-            border-left: 4px solid #dc3545;
+            border-radius: var(--radius-sm);
+            border-left: 4px solid #c62828;
         }
 
         .btn-small {
@@ -63,47 +84,56 @@
         }
 
         .btn-danger {
-            background: #dc3545;
+            background: #c62828;
             color: white;
             border: none;
             padding: 8px 16px;
-            border-radius: 5px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
+            transition: var(--transition);
         }
 
         .btn-danger:hover {
-            background: #c82333;
+            background: #a81f1f;
         }
 
         .btn-success {
-            background: #28a745;
+            background: var(--green-bright);
             color: white;
             border: none;
             padding: 8px 16px;
-            border-radius: 5px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
+            transition: var(--transition);
         }
 
         .btn-success:hover {
-            background: #218838;
+            background: var(--primary);
         }
 
         .btn-warning {
-            background: #ff9800;
+            background: #f57f17;
             color: white;
             border: none;
             padding: 8px 16px;
-            border-radius: 5px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
+            transition: var(--transition);
         }
 
         .btn-info {
-            background: #17a2b8;
+            background: var(--teal);
             color: white;
             border: none;
             padding: 8px 16px;
-            border-radius: 5px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .btn-info:hover,
+        .btn-warning:hover {
+            filter: brightness(0.9);
         }
 
         .table-container {
@@ -119,15 +149,15 @@
         }
 
         .badge-cancelada {
-            background: #f8d7da;
-            color: #721c24;
+            background: #fce4ec;
+            color: #c62828;
         }
 
         .documentos-list {
             margin-top: 20px;
             padding: 15px;
-            background: white;
-            border-radius: 8px;
+            background: var(--white);
+            border-radius: var(--radius-md);
         }
 
         .documento-item {
@@ -135,7 +165,7 @@
             justify-content: space-between;
             align-items: center;
             padding: 10px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--gray-light);
         }
 
         .modal {
@@ -146,16 +176,34 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
+            background-color: rgba(14, 30, 20, 0.6);
         }
 
         .modal-content {
-            background-color: white;
+            background-color: var(--white);
             margin: 5% auto;
-            padding: 20px;
-            border-radius: 8px;
+            padding: 25px;
+            border-radius: var(--radius-md);
             width: 70%;
             max-width: 800px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+        }
+
+        .modal .close {
+            float: right;
+            font-size: 1.6rem;
+            line-height: 1;
+            cursor: pointer;
+            color: #999;
+            transition: var(--transition);
+        }
+
+        .modal .close:hover {
+            color: var(--dark-text);
         }
 
         .ordenes-list {
@@ -168,35 +216,38 @@
             display: block;
             padding: 10px;
             margin: 5px 0;
-            border: 1px solid #eee;
-            border-radius: 6px;
+            border: 1px solid var(--gray-light);
+            border-radius: var(--radius-sm);
             cursor: pointer;
+            transition: var(--transition);
         }
 
         .checkbox-label:hover {
-            background: #f0f8f0;
+            background: rgba(76, 175, 80, 0.08);
+            border-color: var(--green-bright);
         }
 
         .acciones-compras {
             margin-top: 25px;
             padding: 20px;
-            background: #e8f4f8;
-            border-radius: 8px;
-            border-left: 5px solid #17a2b8;
+            background: #e6f3f1;
+            border-radius: var(--radius-md);
+            border-left: 5px solid var(--teal);
         }
 
         /* Estilos para proveedores pendientes */
         .proveedores-pendientes {
-            background: white;
-            border-radius: 10px;
+            background: var(--white);
+            border-radius: var(--radius-md);
             padding: 20px;
             margin-bottom: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--gray-light);
         }
-        
-        .tipo-transporte { border-left: 5px solid #17a2b8; }
-        .tipo-material { border-left: 5px solid #ff9800; }
-        
+
+        .tipo-transporte { border-left: 5px solid var(--teal); }
+        .tipo-material { border-left: 5px solid #f57f17; }
+
         .badge-tipo {
             display: inline-block;
             padding: 3px 10px;
@@ -204,76 +255,164 @@
             font-size: 0.75rem;
             font-weight: bold;
         }
-        
-        .tipo-transporte-badge { background: #17a2b8; color: white; }
-        .tipo-material-badge { background: #ff9800; color: white; }
-        
+
+        .tipo-transporte-badge { background: var(--teal); color: white; }
+        .tipo-material-badge { background: #f57f17; color: white; }
+
         .filtro-tabs {
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
-            border-bottom: 2px solid #eee;
+            border-bottom: 2px solid var(--gray-light);
             padding-bottom: 10px;
+            flex-wrap: wrap;
         }
-        
+
         .tab-btn {
             padding: 8px 20px;
-            background: #f0f0f0;
+            background: var(--gray-light);
+            color: var(--dark-text);
             border: none;
             border-radius: 20px;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: var(--transition);
         }
-        
+
+        .tab-btn:hover {
+            background: #dcdcdc;
+        }
+
         .tab-btn.active {
-            background: #006400;
+            background: var(--primary);
             color: white;
         }
-        
+
         .proveedor-card {
-            background: #f8f9fa;
-            border-radius: 8px;
+            background: var(--cream);
+            border-radius: var(--radius-md);
             padding: 15px;
             margin-bottom: 15px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
+            gap: 12px;
+            transition: var(--transition);
         }
-        
+
+        .proveedor-card:hover {
+            box-shadow: var(--shadow-sm);
+        }
+
         .proveedor-info {
             flex: 1;
+            min-width: 220px;
         }
-        
+
         .proveedor-actions {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
-        
+
         .btn-sm {
             padding: 5px 12px;
             font-size: 0.85rem;
         }
-        
+
         .documentos-link {
-            color: #006400;
+            color: var(--primary);
             text-decoration: none;
             margin-left: 15px;
             font-size: 0.85rem;
         }
-        
-        .estatus-pendiente { background: #fff3cd; color: #856404; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-left: 10px; }
+
+        .documentos-link:hover {
+            text-decoration: underline;
+        }
+
+        .estatus-pendiente { background: #fffde7; color: #f57f17; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-left: 10px; }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 768px) {
+            .admin-header {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 14px 16px;
+            }
+
+            .admin-container {
+                margin: 18px auto;
+                padding: 0 12px;
+            }
+
+            .search-box form {
+                flex-direction: column !important;
+            }
+
+            .search-box form button {
+                width: 100% !important;
+            }
+
+            .proveedor-card {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .proveedor-actions {
+                justify-content: flex-end;
+            }
+
+            .modal-content {
+                width: 92%;
+                margin: 12% auto;
+                padding: 18px;
+            }
+
+            .factura-detalle table td {
+                display: block;
+                width: 100% !important;
+            }
+
+            .factura-detalle table tr {
+                display: block;
+                margin-bottom: 8px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .admin-header h1 {
+                font-size: 1.1rem;
+            }
+
+            .filtro-tabs {
+                gap: 6px;
+            }
+
+            .tab-btn {
+                padding: 6px 14px;
+                font-size: 0.85rem;
+            }
+
+            .proveedor-actions {
+                width: 100%;
+            }
+
+            .proveedor-actions button {
+                flex: 1;
+            }
+        }
     </style>
 </head>
 
 <body>
     <div class="admin-header">
-    <h1>🏢 Agrosistemas - Gestión de Documentos y Contraseñas</h1>
+    <h1>🏢 Portal Proveedores<?= (isset($usuario_info) && $usuario_info['es_supervisor'] && $usuario_info['area']) ? ' - ' . htmlspecialchars($usuario_info['area']) : '' ?></h1>
     <div>
         <?php if (isset($usuario_info) && $usuario_info['es_supervisor']): ?>
             <span style="margin-right: 15px;">
-                👤 <?= htmlspecialchars($usuario_info['nombre']) ?> | 
-                Área: <?= $usuario_info['tipo'] === 'transporte' ? '🚚 Transporte' : '📦 Material/Empaque' ?>
+                👤 <?= htmlspecialchars($usuario_info['nombre']) ?> |
+                Área: <?= htmlspecialchars($usuario_info['area'] ?: '—') ?>
             </span>
         <?php elseif (isset($usuario_info) && $usuario_info['es_global']): ?>
             <span style="margin-right: 15px;">
@@ -416,6 +555,20 @@
                             ?>
                         </td>
                     </tr>
+                    <?php if (!empty($comparacionOrden)): ?>
+                    <tr>
+                        <td><strong>Validación de Orden de Compra:</strong></td>
+                        <td>
+                            <span class="badge-comparacion <?= $comparacionOrden['clase'] ?>">
+                                <?= htmlspecialchars($comparacionOrden['label']) ?>
+                            </span>
+                            <span style="margin-left:10px; color:#666; font-size:0.85rem;">
+                                Orden: Q <?= number_format($comparacionOrden['monto_orden'], 2) ?>
+                                &middot; Diferencia: Q <?= number_format($comparacionOrden['diferencia'], 2) ?>
+                            </span>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
                     <?php if (!empty($factura['fecha_inicio_credito'])): ?>
                     <tr>
                         <td><strong>Fecha Inicio Crédito:</strong></td>
@@ -531,6 +684,9 @@
                     </div>
                 <?php endif; ?>
             </div>
+            <div style="margin-top: 30px;">
+        <a href="index.php?controller=admin&action=gestionarContraseñas" class="btn-secondary">← Volver al Dashboard</a>
+    </div>
         <?php endif; ?>
 
         <!-- Últimas facturas reportadas -->
@@ -543,6 +699,7 @@
                         <th>Proveedor</th>
                         <th>Factura</th>
                         <th>Monto</th>
+                        <th>Validación de Orden de Compra</th>
                         <th>Estado</th>
                         <th>Contraseña</th>
                         <th>Acción</th>
@@ -551,7 +708,7 @@
                 <tbody>
                     <?php if (empty($ultimas_facturas)): ?>
                         <tr>
-                            <td colspan="7">No hay facturas pendientes</td>
+                            <td colspan="8">No hay facturas pendientes</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($ultimas_facturas as $f): ?>
@@ -560,6 +717,17 @@
                                 <td><?= htmlspecialchars(substr($f['proveedor_nombre'], 0, 30)) ?></td>
                                 <td><strong><?= htmlspecialchars($f['numero_factura']) ?></strong></td>
                                 <td>Q <?= number_format($f['monto'], 2) ?></td>
+                                <td>
+                                    <?php if (!empty($f['comparacion_orden'])): $co = $f['comparacion_orden']; ?>
+                                        <span class="badge-comparacion <?= $co['clase'] ?>"
+                                              title="<?= htmlspecialchars($co['tipo_corto'] ?? 'Orden') ?>: Q <?= number_format($co['monto_orden'], 2) ?> · Diferencia: Q <?= number_format($co['diferencia'], 2) ?>">
+                                            <?= $co['clase'] === 'igual' ? 'Igual' : ($co['clase'] === 'orden-mayor' ? htmlspecialchars($co['tipo_corto'] ?? 'Orden') . ' mayor' : 'Factura mayor') ?>
+                                        </span>
+                                        <div style="font-size:0.75rem; color:#666; margin-top:2px;">Dif: Q <?= number_format($co['diferencia'], 2) ?></div>
+                                    <?php else: ?>
+                                        <span style="color:#999;">—</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><span class="status <?= $f['estado'] ?>"><?= ucfirst(str_replace('_', ' ', $f['estado'])) ?></span></td>
                                 <td>
                                     <?php if (!empty($f['contrasena_pago']) && empty($f['contrasena_cancelada'])): ?>
@@ -571,7 +739,7 @@
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <a href="?controller=admin&action=gestionarContraseñas&buscar=<?= urlencode($f['numero_factura']) ?>"
+                                    <a href="?controller=admin&action=gestionarContraseñas&id=<?= (int)$f['id'] ?>"
                                         class="btn-small">Ver/Gestionar</a>
                                 </td>
                             </tr>

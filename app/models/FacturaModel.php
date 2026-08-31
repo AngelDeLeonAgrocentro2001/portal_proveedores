@@ -17,6 +17,10 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
     $monto          = floatval($post['monto'] ?? 0);
     $retencion      = floatval($post['retencion'] ?? 0);
     $ordenes_seleccionadas = $post['ordenes'] ?? [];
+    // El campo de órdenes es un input hidden name="ordenes[]" que siempre se envía (incluso vacío),
+    // así que PHP arma un array con un string vacío cuando no se seleccionó ninguna orden. Sin este
+    // filtro, empty() nunca detecta "sin órdenes" porque el array técnicamente tiene 1 elemento.
+    $ordenes_seleccionadas = array_values(array_filter(array_map('trim', $ordenes_seleccionadas), fn($v) => $v !== ''));
     $viajes         = trim($post['viajes'] ?? '');
     
     // Viajes de transporte (NUEVO)
@@ -33,7 +37,8 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
         return ['success' => false, 'message' => 'Faltan datos obligatorios'];
     }
 
-    if (empty($ordenes_seleccionadas)) {
+    // Facturas de Q1500 o menos no requieren Orden de Compra vinculada
+    if ($monto > 1500 && empty($ordenes_seleccionadas)) {
         return ['success' => false, 'message' => 'Debes seleccionar al menos una Orden de Compra'];
     }
 
@@ -380,10 +385,13 @@ private function subirArchivo($file, $destinoDir) {
                     contrasena_pago, 
                     fecha_pago_esperada, 
                     fecha_inicio_credito,     -- ← AÑADIDO
-                    pdf_factura, 
-                    pdf_constancia, 
+                    pdf_factura,
+                    pdf_constancia,
+                    pdf_retencion_iva,
+                    pdf_retencion_isr,
+                    ordenes_relacionadas,
                     viajes
-                FROM facturas 
+                FROM facturas
                 WHERE cardcode = ?
             ";
 

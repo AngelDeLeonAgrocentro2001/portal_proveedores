@@ -52,6 +52,46 @@ class AuthController {
         require_once BASE_PATH . 'app/views/auth/login.php';
     }
 
+    // Login para personal interno (Super Admin, Contabilidad, Finanzas, Compras/SACI/Material
+    // Empaque/Transporte): solo correo y contraseña. No toca login() ni su flujo/formulario.
+    public function loginStaff() {
+        $error = null;
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $email    = trim($_POST['email'] ?? '');
+            $password = $_POST['password'] ?? '';
+
+            if (empty($email) || empty($password)) {
+                $error = "Correo y contraseña son obligatorios";
+            } else {
+                $model = new UsuarioModel();
+                $user = $model->loginStaff($email, $password);
+
+                if ($user) {
+                    $_SESSION['user'] = $user;
+
+                    // Mismo enrutamiento por rol que usa el login de proveedores
+                    if ($user['rol'] === 'superadmin') {
+                        header('Location: index.php?controller=superadmin&action=dashboard');
+                    } elseif ($user['rol'] === 'supervisor_compras') {
+                        header('Location: index.php?controller=admin&action=gestionarContraseñas');
+                    } elseif ($user['rol'] === 'supervisor_finanzas') {
+                        header('Location: index.php?controller=finanzas&action=dashboard');
+                    } elseif ($user['rol'] === 'contabilidad') {
+                        header('Location: index.php?controller=contabilidad&action=dashboard');
+                    } else {
+                        header('Location: index.php?controller=proveedor&action=dashboard');
+                    }
+                    exit;
+                } else {
+                    $error = "Correo o contraseña incorrectos";
+                }
+            }
+        }
+
+        require_once BASE_PATH . 'app/views/auth/login_staff.php';
+    }
+
     public function sso() {
         $token     = $_GET['token'] ?? '';
         $email     = $_GET['email'] ?? '';
@@ -125,8 +165,13 @@ class AuthController {
     }
 
     public function logout() {
+        // El personal interno (login por correo/contraseña) vuelve a su propio login al salir;
+        // los proveedores (login con CardCode) siguen yendo al login normal, sin cambios para ellos.
+        $rolesStaff = ['superadmin', 'contabilidad', 'supervisor_finanzas', 'supervisor_compras'];
+        $esStaff = in_array($_SESSION['user']['rol'] ?? '', $rolesStaff, true);
+
         $_SESSION = array();
-        
+
         if (ini_get("session.use_cookies")) {
             $params = session_get_cookie_params();
             setcookie(session_name(), '', time() - 42000,
@@ -134,10 +179,14 @@ class AuthController {
                 $params["secure"], $params["httponly"]
             );
         }
-        
+
         session_destroy();
-        
-        header('Location: index.php?controller=auth&action=login');
+
+        if ($esStaff) {
+            header('Location: index.php?controller=auth&action=loginStaff');
+        } else {
+            header('Location: index.php?controller=auth&action=login');
+        }
         exit;
     }
 }

@@ -1,6 +1,7 @@
 <?php
 // app/models/SuperAdminModel.php
 require_once BASE_PATH . 'database/DatabasePortal.php';
+require_once BASE_PATH . 'database/DatabaseSAP.php';
 
 class SuperAdminModel {
     private $pdo;
@@ -41,6 +42,55 @@ class SuperAdminModel {
         $stmt = $this->pdo->prepare("SELECT 1 FROM proveedores WHERE cardcode = ?");
         $stmt->execute([$cardcode]);
         return (bool)$stmt->fetchColumn();
+    }
+
+    // Trae los días de crédito reales del proveedor desde SAP (OCRD.GroupNum -> OCTG.ExtraDays,
+    // el "Grupo de Proveedores" configurado en SAP ya trae sus propios días de crédito). Se usa
+    // al crear el proveedor en el portal, para no tener que digitarlos a mano y que coincidan con
+    // lo que ya está configurado en SAP. Devuelve null si el CardCode no existe en SAP o si SAP
+    // no responde — el formulario simplemente no se autocompleta en ese caso, y el campo sigue
+    // siendo editable a mano como hasta ahora.
+    public function getDiasCreditoSAP($cardcode) {
+        if (empty($cardcode)) {
+            return null;
+        }
+
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+
+            $query = "
+                SELECT
+                    T0.\"CardCode\" AS \"cardcode\",
+                    T0.\"CardName\" AS \"cardname\",
+                    T0.\"GroupNum\" AS \"groupnum\",
+                    T1.\"ExtraDays\" AS \"extradays\"
+                FROM \"T_GT_AGROCENTRO_2016\".OCRD T0
+                INNER JOIN \"T_GT_AGROCENTRO_2016\".OCTG T1 ON T0.\"GroupNum\" = T1.\"GroupNum\"
+                WHERE T0.\"CardCode\" = ?
+            ";
+
+            $stmt = odbc_prepare($conexion, $query);
+            if (!$stmt || !odbc_execute($stmt, [$cardcode])) {
+                throw new Exception("Error ejecutando consulta: " . odbc_errormsg($conexion));
+            }
+
+            $row = odbc_fetch_object($stmt);
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            if (!$row) {
+                return null;
+            }
+
+            return [
+                'cardname' => $row->cardname ?? '',
+                'dias_credito' => (int)($row->extradays ?? 0)
+            ];
+        } catch (Exception $e) {
+            error_log("Error al consultar días de crédito en SAP: " . $e->getMessage());
+            return null;
+        }
     }
 
     public function crearProveedor($data) {

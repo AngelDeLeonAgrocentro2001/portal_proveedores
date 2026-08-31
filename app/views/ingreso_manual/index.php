@@ -435,8 +435,8 @@
                         <tbody id="tablaFacturasBody">
                             <?php foreach ($facturasSAT as $f): ?>
                                 <tr>
-                                    <td class="radio-group">
-                                        <input type="radio" name="numero_factura" 
+                                    <td style="text-align:center;">
+                                        <input type="radio" name="numero_factura"
                                                value="<?= htmlspecialchars($f['numero_completo']) ?>"
                                                data-serie="<?= htmlspecialchars($f['serie']) ?>"
                                                data-numero="<?= htmlspecialchars($f['numero_dte']) ?>"
@@ -551,7 +551,8 @@
             return false;
         }
         
-        if (ordenesSeleccionadas.length === 0) {
+        const montoFactura = parseFloat(document.getElementById('monto_seleccionado')?.value || 0);
+        if (montoFactura > 1500 && ordenesSeleccionadas.length === 0) {
             e.preventDefault();
             alert('Por favor, seleccione al menos una Orden de Compra');
             return false;
@@ -567,7 +568,12 @@
             return false;
         }
         
-        return confirm(`¿Confirmar generación de contraseña para la factura ${serie} ${numero}?\n\nSe generará una contraseña y la factura quedará marcada como usada.`);
+        const confirmado = confirm(`¿Confirmar generación de contraseña para la factura ${serie} ${numero}?\n\nSe generará una contraseña y la factura quedará marcada como usada.`);
+        if (!confirmado) {
+            e.preventDefault();
+            return false;
+        }
+        return true;
     });
 
     // ===== Buscador y paginación de facturas disponibles (15 por página) =====

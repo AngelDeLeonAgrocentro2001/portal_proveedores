@@ -54,6 +54,11 @@ class ProveedorController
         $facturas  = $proveedorModel->getUltimasFacturas($cardcode, 5);
         $pagos     = $facturaModel->getUltimosPagos($cardcode, 5);
 
+        // Días de crédito reales desde SAP (no el valor fijo guardado en proveedores.dias_credito,
+        // que puede quedar desactualizado). Si SAP no responde, se usa el valor local como respaldo.
+        $diasCreditoSAP = $proveedorModel->getDiasCreditoSAP($cardcode);
+        $diasCredito = $diasCreditoSAP ?? ($proveedor['dias_credito'] ?? 0);
+
         // Control según rol
         $mostrarPagos = in_array($rol, ['admin', 'consultas']);
         $esAdmin      = ($rol === 'admin');
@@ -90,7 +95,15 @@ class ProveedorController
             exit;
         }
 
-        $ordenesAbiertas = $proveedorModel->getOrdenesCompraByCardcode($cardcode, 'abierta');
+        // Los proveedores de material de empaque seleccionan Entrada de Mercancía (SAP OPDN)
+        // en vez de Orden de Compra (OPOR) al reportar su factura — misma forma de datos
+        // (docentry/numero_oc/fecha/monto/moneda/estado), así que el modal de selección y el
+        // envío a SAP (ContabilidadController::enviarSAP) ya saben distinguir cuál es cuál
+        // según el tipo de proveedor de la factura.
+        $esMaterialEmpaque = ($proveedor['tipo_proveedor'] ?? '') === 'material_empaque';
+        $ordenesAbiertas = $esMaterialEmpaque
+            ? $proveedorModel->getEntradasMercanciaFlatByCardcode($cardcode, 'abierta')
+            : $proveedorModel->getOrdenesCompraByCardcode($cardcode, 'abierta');
 
         // Verificar si el proveedor está en el grupo de doble factura
         $pdo = DatabasePortal::getInstance()->getPdo();
@@ -223,7 +236,7 @@ $cardcode_js = $_SESSION['user']['cardcode'];
             die("Archivo no disponible");
         }
 
-        $rutaCompleta = BASE_PATH . 'public/' . $rutaRelativa;
+        $rutaCompleta = BASE_PATH . $rutaRelativa;
 
         if (!file_exists($rutaCompleta)) {
             die("El archivo no existe en el servidor");
@@ -235,6 +248,188 @@ $cardcode_js = $_SESSION['user']['cardcode'];
         header('Content-Length: ' . filesize($rutaCompleta));
         readfile($rutaCompleta);
         exit;
+    }
+
+    // Ver/descargar la constancia de retención de IVA que Contabilidad subió para esta factura.
+    // ?modo=ver la abre inline en el navegador; cualquier otro valor (o ausente) fuerza la descarga.
+    public function descargarRetencionIVA()
+    {
+        $this->descargarRetencion('pdf_retencion_iva', 'retencion_iva');
+    }
+
+    // Igual que arriba, para la constancia de retención de ISR.
+    public function descargarRetencionISR()
+    {
+        $this->descargarRetencion('pdf_retencion_isr', 'retencion_isr');
+    }
+
+    private function descargarRetencion($campo, $prefijoArchivo)
+    {
+        if (!isset($_SESSION['user'])) {
+            header('Location: index.php?controller=auth&action=login');
+            exit;
+        }
+
+        $id = $_GET['id'] ?? 0;
+        $cardcode = $_SESSION['user']['cardcode'];
+
+        $stmt = $this->pdo->prepare("SELECT $campo FROM facturas WHERE id = ? AND cardcode = ?");
+        $stmt->execute([$id, $cardcode]);
+        $factura = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$factura || empty($factura[$campo])) {
+            die("Documento no disponible");
+        }
+
+        $ruta = BASE_PATH . $factura[$campo];
+        if (!file_exists($ruta)) {
+            die("El archivo no existe en el servidor");
+        }
+
+        $disposition = (($_GET['modo'] ?? '') === 'ver') ? 'inline' : 'attachment';
+
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: ' . $disposition . '; filename="' . $prefijoArchivo . '_' . $id . '.pdf"');
+        header('Content-Length: ' . filesize($ruta));
+        readfile($ruta);
+        exit;
+    }
+
+    // Envía la constancia de retención (IVA o ISR) al correo del proveedor en sesión (a sí mismo).
+    public function enviarRetencionPorCorreo()
+    {
+        header('Content-Type: application/json');
+
+        if (!isset($_SESSION['user'])) {
+            echo json_encode(['success' => false, 'message' => 'Sesión no iniciada']);
+            exit;
+        }
+
+        $id = $_POST['id'] ?? 0;
+        $tipo = $_POST['tipo'] ?? ''; // 'iva' o 'isr'
+        $cardcode = $_SESSION['user']['cardcode'];
+        $emailDestino = $_SESSION['user']['email'] ?? '';
+
+        if (!$id || !in_array($tipo, ['iva', 'isr'], true) || empty($emailDestino)) {
+            echo json_encode(['success' => false, 'message' => 'Datos inválidos']);
+            exit;
+        }
+
+        $campo = $tipo === 'iva' ? 'pdf_retencion_iva' : 'pdf_retencion_isr';
+        $etiqueta = $tipo === 'iva' ? 'IVA' : 'ISR';
+
+        $stmt = $this->pdo->prepare("SELECT numero_factura, $campo AS ruta FROM facturas WHERE id = ? AND cardcode = ?");
+        $stmt->execute([$id, $cardcode]);
+        $factura = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$factura || empty($factura['ruta'])) {
+            echo json_encode(['success' => false, 'message' => 'Documento no disponible']);
+            exit;
+        }
+
+        $ruta = BASE_PATH . $factura['ruta'];
+        if (!file_exists($ruta)) {
+            echo json_encode(['success' => false, 'message' => 'El archivo no existe en el servidor']);
+            exit;
+        }
+
+        require_once BASE_PATH . 'app/models/MailerService.php';
+
+        $nombreProveedor = $_SESSION['user']['nombre'] ?? $_SESSION['user']['username'] ?? 'Proveedor';
+        $numeroFactura = htmlspecialchars($factura['numero_factura']);
+        $asunto = "Constancia de Retención $etiqueta - Factura {$factura['numero_factura']}";
+        $cuerpoHtml = $this->plantillaCorreoRetencion(htmlspecialchars($nombreProveedor), $etiqueta, $numeroFactura);
+        $cuerpoTexto = "Hola $nombreProveedor,\n\nAdjunto la constancia de retención de $etiqueta correspondiente a la factura {$factura['numero_factura']}.\n\nPortal de Proveedores - Agrocentro";
+        $nombreAdjunto = "retencion_{$tipo}_{$factura['numero_factura']}.pdf";
+
+        $enviado = MailerService::enviarConAdjunto(
+            $emailDestino,
+            $nombreProveedor,
+            $asunto,
+            $cuerpoHtml,
+            $cuerpoTexto,
+            $ruta,
+            $nombreAdjunto
+        );
+
+        if ($enviado) {
+            echo json_encode(['success' => true, 'message' => "Correo enviado a $emailDestino"]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'No se pudo enviar el correo. Intenta de nuevo más tarde.']);
+        }
+        exit;
+    }
+
+    // HTML del correo de constancia de retención IVA/ISR. $nombre, $etiqueta y $numeroFactura ya vienen escapados.
+    private function plantillaCorreoRetencion($nombre, $etiqueta, $numeroFactura)
+    {
+        $fecha = date('d/m/Y');
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0; padding:0; background-color:#F2EEE7; font-family: 'Segoe UI', Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F2EEE7; padding:32px 16px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+                    <tr>
+                        <td style="background-color:#0E1E14; background-image:linear-gradient(135deg,#0E1E14 0%,#16301f 100%); padding:28px 32px; border-bottom:4px solid #4CAF50;" align="center">
+                            <p style="margin:0; color:#7DA13D; font-size:12px; letter-spacing:2px; text-transform:uppercase; font-weight:600;">Portal de Proveedores</p>
+                            <p style="margin:4px 0 0; color:#ffffff; font-size:22px; font-weight:700;">Agrocentro</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:36px 32px 8px;">
+                            <p style="margin:0 0 16px; color:#282828; font-size:16px;">Hola <strong>{$nombre}</strong>,</p>
+                            <p style="margin:0 0 24px; color:#4a4a4a; font-size:15px; line-height:1.6;">
+                                Te compartimos la constancia de <strong>Retención de {$etiqueta}</strong> correspondiente a la factura que reportaste en el portal. Encontrarás el documento en <strong>PDF adjunto</strong> a este correo.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0 32px 32px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F2EEE7; border-left:4px solid #0D7C66; border-radius:8px;">
+                                <tr>
+                                    <td style="padding:18px 20px;">
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td style="padding:6px 0; color:#669149; font-size:12px; text-transform:uppercase; letter-spacing:1px; font-weight:600; width:45%;">Tipo de retención</td>
+                                                <td style="padding:6px 0; color:#0E1E14; font-size:15px; font-weight:700;">{$etiqueta}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding:6px 0; color:#669149; font-size:12px; text-transform:uppercase; letter-spacing:1px; font-weight:600;">Factura</td>
+                                                <td style="padding:6px 0; color:#0E1E14; font-size:15px; font-weight:700;">{$numeroFactura}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding:6px 0; color:#669149; font-size:12px; text-transform:uppercase; letter-spacing:1px; font-weight:600;">Fecha de envío</td>
+                                                <td style="padding:6px 0; color:#0E1E14; font-size:15px;">{$fecha}</td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0 32px 36px;">
+                            <p style="margin:0; color:#8a8a8a; font-size:13px; line-height:1.6;">
+                                Si tienes alguna duda sobre este documento, comunícate con el área de Contabilidad de Agrocentro.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background-color:#EBEBEB; padding:18px 32px; text-align:center;">
+                            <p style="margin:0; color:#8a8a8a; font-size:12px;">Este es un mensaje automático del Portal de Proveedores &mdash; Agrocentro.<br>Por favor no respondas a este correo.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
     }
 
     // Ver todos los pagos recibidos
@@ -274,9 +469,19 @@ $cardcode_js = $_SESSION['user']['cardcode'];
 
         $estadoFiltro = $_GET['estado'] ?? 'abierta';
 
-        $ordenes = $model->getOrdenesCompraByCardcode($cardcode, $estadoFiltro);
+        // Los proveedores de material de empaque ven Entrada de Mercancía (SAP OPDN/PDN1) en
+        // vez de Órdenes de Compra (OPOR) — esos documentos no manejan orden de compra, sino
+        // recepción directa de mercancía. Todo lo demás de esta página sigue igual para el
+        // resto de tipos de proveedor.
+        $proveedor = $model->getProveedorByCardcode($cardcode);
+        $esMaterialEmpaque = ($proveedor['tipo_proveedor'] ?? '') === 'material_empaque';
 
-        $totalMonto = array_sum(array_column($ordenes, 'monto'));
+        if ($esMaterialEmpaque) {
+            $entradasMercancia = $model->getEntradasMercanciaByCardcode($cardcode, $estadoFiltro);
+        } else {
+            $ordenes = $model->getOrdenesCompraByCardcode($cardcode, $estadoFiltro);
+            $totalMonto = array_sum(array_column($ordenes, 'monto'));
+        }
 
         require_once BASE_PATH . 'app/views/layout/header.php';
         require_once BASE_PATH . 'app/views/proveedor/ordenes-compra.php';
@@ -467,8 +672,9 @@ $cardcode_js = $_SESSION['user']['cardcode'];
         $pdf->Ln(8);
 
         // Tabla
+        $etiquetaOrdenPdf = (($proveedor['tipo_proveedor'] ?? '') === 'material_empaque') ? 'Entrada de Mercancía' : 'Orden de Compra';
         $pdf->SetFont('helvetica', 'B', 10);
-        $pdf->Cell(60, 8, 'Orden de Compra', 1, 0, 'C');
+        $pdf->Cell(60, 8, $etiquetaOrdenPdf, 1, 0, 'C');
         $pdf->Cell(60, 8, 'Documento', 1, 0, 'C');
         $pdf->Cell(35, 8, 'Fecha', 1, 0, 'C');
         $pdf->Cell(35, 8, 'Valor', 1, 1, 'C');
@@ -546,8 +752,8 @@ $cardcode_js = $_SESSION['user']['cardcode'];
                 COALESCE(T0.\"Comments\", '') as \"Observaciones\",
                 T1.\"LineTotal\" as \"MontoLinea\",
                 T1.\"LineNum\" as \"NumeroLinea\"
-            FROM \"T_GT_AGROCENTRO_2016\".  aa T0
-                INNER JOIN \"T_GT_AGROCENTRO_2016\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\" 
+            FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
+                INNER JOIN \"T_GT_AGROCENTRO_2016\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
                 INNER JOIN \"T_GT_AGROCENTRO_2016\".OACT T2 ON T1.\"AcctCode\" = T2.\"AcctCode\"
             WHERE T0.\"CardCode\" = ? 
                 AND T0.\"DocEntry\" = ?

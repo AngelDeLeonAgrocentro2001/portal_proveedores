@@ -368,6 +368,22 @@ body {
 .status.aprobada,
 .status.aprobado_para_pago  { background: #e0f2f1; color: var(--teal); border: 1px solid #80cbc4; }
 
+/* ---------- COMPARACIÓN FACTURA VS ORDEN DE COMPRA ---------- */
+.badge-comparacion {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-comparacion.igual        { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.badge-comparacion.orden-mayor  { background: #fffde7; color: #f57f17; border: 1px solid #ffe082; }
+.badge-comparacion.factura-mayor{ background: #fce4ec; color: #c62828; border: 1px solid #ef9a9a; }
+
 /* ---------- FORMS ---------- */
 .form-container {
     width: 100%;

@@ -21,8 +21,15 @@
         }
     </script>
     <style>
-        /* Layout base — sin flex en body para evitar conflictos con sticky */
-        body { background: #f3f4f6; min-height: 100vh; }
+        /* Layout base: body en columna flex para que el footer quede siempre
+           al fondo del viewport (aunque el contenido de la página sea corto). */
+        html { height: 100%; }
+        body {
+            background: #f3f4f6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
 
         /* Header full-width sticky */
         .site-header {
@@ -104,8 +111,8 @@
         }
         .site-userbar .logout-btn:hover { background: rgba(255,255,255,0.3); }
 
-        /* Main content area */
-        .site-main { padding: 24px 20px; width: 100%; }
+        /* Main content area — flex:1 empuja el footer al fondo cuando el contenido es corto */
+        .site-main { padding: 24px 20px; width: 100%; flex: 1 0 auto; }
 
         /* Responsive */
         @media (max-width: 640px) {

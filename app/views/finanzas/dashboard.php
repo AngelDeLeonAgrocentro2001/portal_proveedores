@@ -95,6 +95,20 @@ function safeDateFormat($date, $format = 'd/m/Y')
                 <td><strong>Monto:</strong></td>
                 <td>Q <?= number_format($factura['monto'] ?? 0, 2) ?></td>
             </tr>
+            <?php if (!empty($comparacionOrden)): ?>
+            <tr>
+                <td><strong>Validación de Orden de Compra:</strong></td>
+                <td>
+                    <span class="badge-comparacion <?= $comparacionOrden['clase'] ?>">
+                        <?= htmlspecialchars($comparacionOrden['label']) ?>
+                    </span>
+                    <span style="margin-left:10px; color:#666; font-size:0.85rem;">
+                        Orden: Q <?= number_format($comparacionOrden['monto_orden'], 2) ?>
+                        &middot; Diferencia: Q <?= number_format($comparacionOrden['diferencia'], 2) ?>
+                    </span>
+                </td>
+            </tr>
+            <?php endif; ?>
             <tr>
                 <td><strong>Estado actual:</strong></td>
                 <td><span class="status <?= $factura['estado'] ?? '' ?>"><?= ucfirst(str_replace('_', ' ', $factura['estado'] ?? 'desconocido')) ?></span></td>
@@ -196,13 +210,14 @@ function safeDateFormat($date, $format = 'd/m/Y')
                 <th>Tipo</th>
                 <th>Factura</th>
                 <th>Monto</th>
+                <th>Validación de Orden de Compra</th>
                 <th>Acción</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($facturas_pendientes)): ?>
                 <tr>
-                    <td colspan="7" style="text-align:center; padding:40px;">No hay facturas pendientes de autorización para el período seleccionado</td>
+                    <td colspan="8" style="text-align:center; padding:40px;">No hay facturas pendientes de autorización para el período seleccionado</td>
                 </tr>
             <?php else: ?>
                 <?php foreach ($facturas_pendientes as $f): ?>
@@ -229,6 +244,17 @@ function safeDateFormat($date, $format = 'd/m/Y')
                         </td>
                         <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
                         <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
+                        <td>
+                            <?php if (!empty($f['comparacion_orden'])): $co = $f['comparacion_orden']; ?>
+                                <span class="badge-comparacion <?= $co['clase'] ?>"
+                                      title="<?= htmlspecialchars($co['tipo_corto'] ?? 'Orden') ?>: Q <?= number_format($co['monto_orden'], 2) ?> · Diferencia: Q <?= number_format($co['diferencia'], 2) ?>">
+                                    <?= $co['clase'] === 'igual' ? 'Igual' : ($co['clase'] === 'orden-mayor' ? htmlspecialchars($co['tipo_corto'] ?? 'Orden') . ' mayor' : 'Factura mayor') ?>
+                                </span>
+                                <div style="font-size:0.75rem; color:#666; margin-top:2px;">Dif: Q <?= number_format($co['diferencia'], 2) ?></div>
+                            <?php else: ?>
+                                <span style="color:#999;">—</span>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <a href="?controller=finanzas&action=dashboard&buscar=<?= urlencode($f['numero_factura'] ?? '') ?>&filtro_semana=<?= htmlspecialchars($_GET['filtro_semana'] ?? 'actual') ?>"
                                 class="btn-small">Revisar</a>
