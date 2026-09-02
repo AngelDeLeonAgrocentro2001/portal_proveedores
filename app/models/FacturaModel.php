@@ -87,7 +87,12 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
         $proximoLunesStr = $proximoLunes->format('d/m/Y');
     }
 
-    $fecha_pago_esperada = $this->calcularFechaPago($fecha_inicio_credito, 30);
+    // Días de crédito reales del proveedor (desde SAP, con el valor local como respaldo si SAP
+    // no responde) — antes esto siempre usaba 30 fijo, sin importar el proveedor.
+    $diasCreditoSAP = $provModel->getDiasCreditoSAP($cardcode);
+    $diasCredito = $diasCreditoSAP ?? ($proveedorData['dias_credito'] ?? 30);
+
+    $fecha_pago_esperada = $this->calcularFechaPago($fecha_inicio_credito, $diasCredito);
 
     // Subida de archivos
     $uploadDir = BASE_PATH . 'uploads/';

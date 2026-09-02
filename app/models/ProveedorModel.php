@@ -53,14 +53,21 @@ class ProveedorModel {
         }
     }
 
+    // "Pendiente" = cualquier estado que siga vivo en el flujo (no pagada, no rechazada) —
+    // reportada, validada, revision_compras, aprobada_compras, en_sap, aprobado_para_pago,
+    // confirmacion_pago, aprobada_finanzas. Las rechazadas (compras/finanzas/contabilidad) no
+    // cuentan como pendientes: necesitan corregirse y reportarse de nuevo, no están "esperando
+    // pago". Antes esto se calculaba mal en la vista (contaba 'reportada' dos veces, dando un
+    // número de pendientes mayor al total de facturas) y el monto solo sumaba 3 de los 8 estados
+    // "vivos" — ver conversación del 2026-09-01.
     public function getResumenFacturas($cardcode) {
         $stmt = $this->pdo->prepare("
-            SELECT 
+            SELECT
                 COUNT(*) as total,
-                SUM(CASE WHEN estado = 'reportada' THEN 1 ELSE 0 END) as reportadas,
                 SUM(CASE WHEN estado = 'pagada' THEN 1 ELSE 0 END) as pagadas,
-                COALESCE(SUM(CASE WHEN estado IN ('reportada','validada','en_sap') THEN monto ELSE 0 END), 0) as monto_pendiente
-            FROM facturas 
+                SUM(CASE WHEN estado NOT IN ('pagada','rechazada_compras','rechazada_finanzas','rechazada_contabilidad') THEN 1 ELSE 0 END) as pendientes,
+                COALESCE(SUM(CASE WHEN estado NOT IN ('pagada','rechazada_compras','rechazada_finanzas','rechazada_contabilidad') THEN monto ELSE 0 END), 0) as monto_pendiente
+            FROM facturas
             WHERE cardcode = ?
         ");
         $stmt->execute([$cardcode]);
@@ -161,6 +168,50 @@ class ProveedorModel {
             error_log("Error al consultar órdenes desde SAP: " . $e->getMessage());
             // Fallback a tabla local
             return $this->getOrdenesCompraLocal($cardcode, $estado);
+        }
+    }
+
+    // Saldo pendiente REAL en SAP de un conjunto de órdenes de compra: suma de OpenSum+VatSum de
+    // las líneas que siguen abiertas (LineStatus='O') de cada orden. A diferencia del "monto"
+    // (DocTotal original) que ya se muestra en "Mis Órdenes de Compra", esto refleja lo que SAP
+    // considera realmente disponible en este momento — útil para que el proveedor elija una orden
+    // con saldo suficiente al reportar su factura. Una sola consulta para toda la lista (no una
+    // por orden). Devuelve [docentry => saldo]; una orden sin líneas abiertas no aparece en el
+    // resultado (equivale a saldo 0).
+    public function getSaldosPendientesSAP(array $docentries) {
+        $docentries = array_values(array_unique(array_filter(array_map('intval', $docentries))));
+        if (empty($docentries)) {
+            return [];
+        }
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+
+            $placeholders = implode(',', array_fill(0, count($docentries), '?'));
+            $query = "
+                SELECT T1.\"DocEntry\" AS \"docentry\", SUM(T1.\"OpenSum\" + T1.\"VatSum\") AS \"saldopendiente\"
+                FROM \"T_GT_AGROCENTRO_2016\".POR1 T1
+                WHERE T1.\"DocEntry\" IN ($placeholders) AND T1.\"LineStatus\" = 'O'
+                GROUP BY T1.\"DocEntry\"
+            ";
+
+            $stmt = odbc_prepare($conexion, $query);
+            if (!$stmt || !odbc_execute($stmt, $docentries)) {
+                throw new Exception("Error ejecutando consulta: " . odbc_errormsg($conexion));
+            }
+
+            $saldos = [];
+            while ($row = odbc_fetch_object($stmt)) {
+                $saldos[(int)$row->docentry] = (float)$row->saldopendiente;
+            }
+
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            return $saldos;
+        } catch (Exception $e) {
+            error_log("Error al consultar saldos pendientes SAP: " . $e->getMessage());
+            return [];
         }
     }
 

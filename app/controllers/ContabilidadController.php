@@ -1087,104 +1087,184 @@ class ContabilidadController
         $docTotal = (float)$factura['monto'];  // Monto real de la factura
         error_log("Monto de la factura: $docTotal");
 
-        // Una línea se enlaza a la orden (BaseEntry) solo si tiene cantidad real (>0) y no es
-        // Entrada de Mercancía de material_empaque (ver comentario más abajo, error "234103405").
-        // Todo lo demás (Quantity=0 / contrato a monto fijo, o cualquier línea de material_empaque)
-        // se envía SIN enlazar, como línea independiente.
-        $esLineaEnlazada = function ($linea) use ($esMaterialEmpaque) {
-            return ((float)$linea['Quantity']) > 0 && !$esMaterialEmpaque;
+        // La orden de compra puede ser de tipo "Artículos" ('I', maneja inventario real) o
+        // "Servicio" ('S') en SAP. La factura siempre se arma como dDocument_Service — SAP
+        // rechaza enlazar (BaseEntry) una factura de Servicio contra una orden de Artículos con
+        // "234103405 - Base document type and target document type do not match", sin importar
+        // que la orden tenga cantidades reales.
+        $esOrdenDeArticulos = ($orden['doctype'] ?? '') === 'I';
+
+        // Una línea se enlaza a la orden (BaseEntry) solo si tiene cantidad real (>0), sigue
+        // abierta en SAP (LineStatus='O'), no es Entrada de Mercancía de material_empaque y la
+        // orden no es de tipo Artículos (estos dos últimos casos chocan con el error "234103405"
+        // de SAP). Todo lo demás (línea ya cerrada, material_empaque, u orden de Artículos) se
+        // envía SIN enlazar, como línea independiente — evita el error "one of the base documents
+        // has already been closed" cuando una línea con cantidad real ya fue cerrada en SAP por
+        // otro motivo.
+        $esLineaEnlazadaPorCantidad = function ($linea) use ($esMaterialEmpaque, $esOrdenDeArticulos) {
+            $lineaAbierta = ($linea['LineStatus'] ?? 'O') === 'O';
+            return ((float)$linea['Quantity']) > 0 && $lineaAbierta && !$esMaterialEmpaque && !$esOrdenDeArticulos;
         };
 
-        // Cantidad total SOLO de las líneas que sí se van a enlazar — su precio unitario sale de
-        // repartir el monto de la factura entre esa cantidad, como ya funcionaba.
+        // Cantidad total SOLO de las líneas que sí se van a enlazar por cantidad — su precio
+        // unitario sale de repartir el monto de la factura entre esa cantidad, como ya funcionaba.
         $totalQuantityEnlazada = 0;
         foreach ($lineasOrden as $linea) {
-            if ($esLineaEnlazada($linea)) {
+            if ($esLineaEnlazadaPorCantidad($linea)) {
                 $totalQuantityEnlazada += (float)$linea['Quantity'];
             }
         }
         $pricePerUnitEnlazada = $totalQuantityEnlazada > 0 ? ($docTotal / $totalQuantityEnlazada) : 0;
 
-        // Las líneas SIN enlazar no tienen cantidad para prorratear el monto — si a cada una se
-        // le pusiera el monto completo de la factura (como antes), el total enviado a SAP se
-        // multiplicaría por la cantidad de líneas sin enlazar. En vez de eso, se reparte el monto
-        // real de la factura proporcionalmente al LineTotal que cada línea tenía en la orden
-        // original, para conservar la distribución por centro de costo del contrato.
-        $totalLineTotalSinEnlazar = 0;
-        foreach ($lineasOrden as $linea) {
-            if (!$esLineaEnlazada($linea)) {
-                $totalLineTotalSinEnlazar += (float)($linea['LineTotal'] ?? 0);
+        // Líneas de monto fijo (Quantity=0): normalmente no se enlazan, porque si el monto de la
+        // factura no coincide con el saldo pendiente real de la línea, SAP ignora el precio que
+        // enviamos y usa el total completo de la línea. PERO si el monto de la factura coincide
+        // exacto (con centavos de tolerancia) con el saldo pendiente real de SAP (OpenLineTotal =
+        // OpenSum+VatSum) de una línea abierta, ese riesgo desaparece — lo que SAP termine usando
+        // es el mismo número que ya íbamos a facturar — así que SÍ se enlaza, para que la orden
+        // cierre de verdad en SAP. Solo se hace si NO hay ya líneas con cantidad real enlazadas
+        // (no se mezclan los dos mecanismos) y solo si hay EXACTAMENTE una línea que calza — si
+        // varias tienen el mismo saldo pendiente no hay forma de saber cuál es, y no se enlaza
+        // ninguna.
+        $lineaMontoFijoParaCerrar = null;
+        if ($totalQuantityEnlazada == 0) {
+            $candidatas = array_filter($lineasOrden, function ($linea) use ($esMaterialEmpaque, $esOrdenDeArticulos, $docTotal) {
+                $lineaAbierta = ($linea['LineStatus'] ?? 'O') === 'O';
+                $saldoLinea = (float)($linea['OpenLineTotal'] ?? 0);
+                return ((float)$linea['Quantity']) == 0 && $lineaAbierta && !$esMaterialEmpaque && !$esOrdenDeArticulos
+                    && $saldoLinea > 0 && abs($docTotal - $saldoLinea) <= 0.01;
+            });
+            if (count($candidatas) === 1) {
+                $lineaMontoFijoParaCerrar = reset($candidatas)['LineNum'];
+                error_log("Documento $docentry línea $lineaMontoFijoParaCerrar: monto fijo con saldo pendiente exacto a la factura (Q$docTotal) — se enlaza vía BaseEntry para cerrar la orden.");
             }
         }
-        $cantidadLineasSinEnlazar = count(array_filter($lineasOrden, fn($l) => !$esLineaEnlazada($l)));
 
         $documentLines = [];
-        $ordenEsMontoFijo = $cantidadLineasSinEnlazar > 0; // hay al menos una línea que no se enlaza a un documento base
-        foreach ($lineasOrden as $index => $linea) {
-            $lineaEnlazada = $esLineaEnlazada($linea);
-            $quantityOriginal = (float)$linea['Quantity'];
-            $quantity = $lineaEnlazada ? $quantityOriginal : 1;
 
-            $taxCode = $esPequeñoContribuyente ? 'EXE' : ($linea['TaxCode'] ?? 'IVA');
-
-            if ($lineaEnlazada) {
-                $precioLinea = $pricePerUnitEnlazada;
-            } elseif ($totalLineTotalSinEnlazar > 0) {
-                $precioLinea = $docTotal * ((float)($linea['LineTotal'] ?? 0) / $totalLineTotalSinEnlazar);
-            } else {
-                $precioLinea = $docTotal / max($cantidadLineasSinEnlazar, 1);
+        if ($lineaMontoFijoParaCerrar !== null) {
+            // Caso especial: el monto de la factura coincide exacto con el saldo pendiente de UNA
+            // sola línea de monto fijo. Esta factura es SOLO para cerrar esa línea puntual — no se
+            // mezclan las demás líneas de la orden (pueden estar cerradas por facturas anteriores
+            // sin relación con esta), para no duplicar ni repartir de más el monto de la factura.
+            $lineaCerrar = null;
+            foreach ($lineasOrden as $linea) {
+                if ($linea['LineNum'] === $lineaMontoFijoParaCerrar) {
+                    $lineaCerrar = $linea;
+                    break;
+                }
             }
-
-            $lineData = [
-                "LineNum" => $index,
-                "ItemDescription" => $linea['Description'] ?? $linea['ItemDescription'] ?? 'Servicio',
-                "Quantity" => $quantity,
-                "PriceAfterVAT" => $precioLinea,
+            $taxCode = $esPequeñoContribuyente ? 'EXE' : ($lineaCerrar['TaxCode'] ?? 'IVA');
+            $documentLines[] = [
+                "LineNum" => 0,
+                "ItemDescription" => $lineaCerrar['Description'] ?? $lineaCerrar['ItemDescription'] ?? 'Servicio',
+                "Quantity" => 1, // SAP exige cantidad > 0 para enlazar, aunque la línea base sea monto fijo (Quantity=0)
+                "PriceAfterVAT" => $docTotal,
                 "TaxCode" => $taxCode,
                 "U_TipoA" => "S",
-                "AccountCode" => $linea['AccountCode'] ?? '640901001',
-                "CostingCode" => $linea['CostingCode'] ?? 'D08',
-                "CostingCode2" => $linea['CostingCode2'] ?? '',
-                "CostingCode3" => $linea['CostingCode3'] ?? '',
-                "DiscountPercent" => 0
+                "AccountCode" => $lineaCerrar['AccountCode'] ?? '640901001',
+                "CostingCode" => $lineaCerrar['CostingCode'] ?? 'D08',
+                "CostingCode2" => $lineaCerrar['CostingCode2'] ?? '',
+                "CostingCode3" => $lineaCerrar['CostingCode3'] ?? '',
+                "DiscountPercent" => 0,
+                "BaseEntry" => (int)$docentry,
+                "BaseLine" => (int)($lineaCerrar['BaseLine'] ?? $lineaMontoFijoParaCerrar),
+                "BaseType" => 22
             ];
-
-            // Si la línea tiene cantidad real (>0) y no es material_empaque, SAP puede "dibujar"
-            // (draw) parcialmente contra la orden respetando el precio que enviamos. Si es una
-            // línea de servicio a monto fijo (Quantity=0) o una Entrada de Mercancía de
-            // material_empaque, no se enlaza vía BaseEntry/BaseLine/BaseType — para el caso de
-            // monto fijo, porque SAP ignoraría el precio enviado y usaría el total completo de
-            // la orden; para material_empaque, porque SAP rechaza mezclar un documento base de
-            // Artículos (OPDN) con una factura de Servicio (error "234103405").
-            if ($lineaEnlazada) {
-                $lineData["BaseEntry"] = (int)$docentry;
-                $lineData["BaseLine"] = (int)($linea['BaseLine'] ?? $index);
-                $lineData["BaseType"] = 22;
-            } else {
-                error_log("Documento $docentry línea $index sin enlace BaseEntry/BaseLine (monto fijo o material_empaque): línea independiente, PriceAfterVAT=$precioLinea.");
+            // Ya quedó enlazada de verdad vía BaseEntry — SAP se encarga de cerrarla, no hace
+            // falta el control de saldo local (que es solo para líneas que SAP no puede ver).
+            $ordenEsMontoFijo = false;
+        } else {
+            // Las líneas SIN enlazar no tienen cantidad para prorratear el monto — si a cada una
+            // se le pusiera el monto completo de la factura (como antes), el total enviado a SAP
+            // se multiplicaría por la cantidad de líneas sin enlazar. En vez de eso, se reparte el
+            // monto real de la factura proporcionalmente al LineTotal que cada línea tenía en la
+            // orden original, para conservar la distribución por centro de costo del contrato.
+            $totalLineTotalSinEnlazar = 0;
+            foreach ($lineasOrden as $linea) {
+                if (!$esLineaEnlazadaPorCantidad($linea)) {
+                    $totalLineTotalSinEnlazar += (float)($linea['LineTotal'] ?? 0);
+                }
             }
+            $cantidadLineasSinEnlazar = count(array_filter($lineasOrden, fn($l) => !$esLineaEnlazadaPorCantidad($l)));
 
-            $documentLines[] = $lineData;
+            $ordenEsMontoFijo = $cantidadLineasSinEnlazar > 0; // hay al menos una línea que no se enlaza a un documento base
+            foreach ($lineasOrden as $index => $linea) {
+                $lineaEnlazada = $esLineaEnlazadaPorCantidad($linea);
+                $quantityOriginal = (float)$linea['Quantity'];
+                $quantity = $lineaEnlazada ? $quantityOriginal : 1;
+
+                $taxCode = $esPequeñoContribuyente ? 'EXE' : ($linea['TaxCode'] ?? 'IVA');
+
+                if ($lineaEnlazada) {
+                    $precioLinea = $pricePerUnitEnlazada;
+                } elseif ($totalLineTotalSinEnlazar > 0) {
+                    $precioLinea = $docTotal * ((float)($linea['LineTotal'] ?? 0) / $totalLineTotalSinEnlazar);
+                } else {
+                    $precioLinea = $docTotal / max($cantidadLineasSinEnlazar, 1);
+                }
+
+                $lineData = [
+                    "LineNum" => $index,
+                    "ItemDescription" => $linea['Description'] ?? $linea['ItemDescription'] ?? 'Servicio',
+                    "Quantity" => $quantity,
+                    "PriceAfterVAT" => $precioLinea,
+                    "TaxCode" => $taxCode,
+                    "U_TipoA" => "S",
+                    "AccountCode" => $linea['AccountCode'] ?? '640901001',
+                    "CostingCode" => $linea['CostingCode'] ?? 'D08',
+                    "CostingCode2" => $linea['CostingCode2'] ?? '',
+                    "CostingCode3" => $linea['CostingCode3'] ?? '',
+                    "DiscountPercent" => 0
+                ];
+
+                // Si la línea tiene cantidad real (>0), sigue abierta en SAP, no es
+                // material_empaque y la orden no es de tipo Artículos, SAP puede "dibujar" (draw)
+                // parcialmente contra la orden respetando el precio que enviamos. En cualquier
+                // otro caso NO se enlaza vía BaseEntry/BaseLine/BaseType:
+                // - Línea de servicio a monto fijo (Quantity=0) sin coincidencia exacta de monto:
+                //   SAP ignoraría el precio enviado y usaría el total completo de la orden.
+                // - Línea con cantidad real pero ya cerrada (LineStatus='C'): SAP rechaza el
+                //   enlace con "one of the base documents has already been closed".
+                // - Entrada de Mercancía de material_empaque, u orden de Artículos (DocType='I'):
+                //   SAP rechaza mezclar un documento base de Artículos con una factura de Servicio
+                //   (error "234103405").
+                if ($lineaEnlazada) {
+                    $lineData["BaseEntry"] = (int)$docentry;
+                    $lineData["BaseLine"] = (int)($linea['BaseLine'] ?? $index);
+                    $lineData["BaseType"] = 22;
+                } else {
+                    error_log("Documento $docentry línea $index sin enlace BaseEntry/BaseLine (monto fijo, línea cerrada, material_empaque u orden de Artículos): línea independiente, PriceAfterVAT=$precioLinea.");
+                }
+
+                $documentLines[] = $lineData;
+            }
         }
 
-        // ========== CONTROL DE SALDO PARA ÓRDENES A MONTO FIJO (Quantity=0) ==========
-        // Como estas órdenes no se enlazan vía BaseEntry, SAP no descuenta su saldo automáticamente.
-        // El portal lleva su propio control sumando lo ya facturado (enviado a SAP) contra esa orden,
-        // para no dejar pasar facturas que sobrepasen el monto total del contrato.
-        if ($ordenEsMontoFijo && !empty($orden['doctotal'])) {
-            $totalOrden = (float)$orden['doctotal'];
+        // ========== CONTROL DE SALDO PARA LÍNEAS SIN ENLAZAR (monto fijo o ya cerradas) ==========
+        // Como estas líneas no se enlazan vía BaseEntry, SAP no descuenta su saldo automáticamente
+        // con esta factura. El saldo base ya NO es el DocTotal original de la orden: se consulta
+        // el saldo pendiente REAL en SAP (OpenSum+VatSum de líneas abiertas de POR1), que ya
+        // refleja cualquier consumo fuera del portal. A eso se le resta lo que el portal mismo ya
+        // envió (que SAP no ve, por no estar enlazado). Para Entrada de Mercancía (material_empaque)
+        // el DocEntry pertenece a OPDN/PDN1, no a OPOR/POR1 — otra secuencia de numeración — así que
+        // no se consulta el saldo vía POR1 (podría coincidir por casualidad con una orden distinta) y
+        // se usa el DocTotal original de la entrada como antes.
+        $saldoPendienteSAP = ($ordenEsMontoFijo && !$esMaterialEmpaque) ? $this->getSaldoPendienteSAP($docentry) : null;
+        if ($ordenEsMontoFijo && ($saldoPendienteSAP !== null || !empty($orden['doctotal']))) {
+            $totalOrden = $saldoPendienteSAP !== null ? $saldoPendienteSAP : (float)($orden['doctotal'] ?? 0);
             $totalYaFacturado = $this->getTotalFacturadoContraOrden($docentry, $factura_id);
             $totalConEstaFactura = $totalYaFacturado + $docTotal;
 
-            error_log("Control de saldo orden $docentry (monto fijo): total orden=$totalOrden, ya facturado=$totalYaFacturado, con esta factura=$totalConEstaFactura");
+            error_log("Control de saldo orden $docentry: saldo SAP=" . ($saldoPendienteSAP !== null ? $saldoPendienteSAP : 'N/D (usando doctotal)') . ", base usada=$totalOrden, ya facturado por el portal=$totalYaFacturado, con esta factura=$totalConEstaFactura");
 
             if ($totalConEstaFactura > $totalOrden + 0.01) {
                 $this->logout_sap();
                 echo json_encode([
                     'success' => false,
-                    'message' => "Esta factura excede el saldo disponible de la orden $docentry (contrato a monto fijo). " .
-                        "Total de la orden: Q" . number_format($totalOrden, 2) . ". " .
-                        "Ya facturado contra ella: Q" . number_format($totalYaFacturado, 2) . ". " .
+                    'message' => "Esta factura excede el saldo disponible de la orden $docentry. " .
+                        "Saldo pendiente" . ($saldoPendienteSAP !== null ? " en SAP" : " (total de la orden)") . ": Q" . number_format($totalOrden, 2) . ". " .
+                        "Ya facturado por el portal contra ella: Q" . number_format($totalYaFacturado, 2) . ". " .
                         "Con esta factura (Q" . number_format($docTotal, 2) . ") el total sería Q" . number_format($totalConEstaFactura, 2) . "."
                 ]);
                 exit;
@@ -1975,6 +2055,40 @@ class ContabilidadController
         return (float)$stmt->fetchColumn();
     }
 
+    // Saldo pendiente REAL de la orden según SAP: suma de OpenSum+VatSum de sus líneas abiertas
+    // (LineStatus='O'). A diferencia del DocTotal original de la orden, este número ya refleja
+    // cualquier consumo que SAP conozca (por ejemplo, documentos creados directamente en SAP,
+    // fuera del portal). Devuelve null si no se pudo consultar o la orden no tiene líneas abiertas
+    // (orden totalmente cerrada en SAP).
+    private function getSaldoPendienteSAP($docentry)
+    {
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+
+            $query = "
+                SELECT SUM(T1.\"OpenSum\" + T1.\"VatSum\") as \"totalpendiente\"
+                FROM \"T_GT_AGROCENTRO_2016\".POR1 T1
+                WHERE T1.\"DocEntry\" = ? AND T1.\"LineStatus\" = 'O'
+            ";
+            $stmt = odbc_prepare($conexion, $query);
+            if (!$stmt || !odbc_execute($stmt, [$docentry])) {
+                throw new Exception("Error consultando saldo pendiente SAP: " . odbc_errormsg($conexion));
+            }
+            $row = odbc_fetch_object($stmt);
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            if (!$row || $row->totalpendiente === null) {
+                return null;
+            }
+            return (float)$row->totalpendiente;
+        } catch (Exception $e) {
+            error_log("getSaldoPendienteSAP - Error: " . $e->getMessage());
+            return null;
+        }
+    }
+
     private function getOrdenCompraDetalles($docentry, $cardcode)
     {
         try {
@@ -1983,15 +2097,16 @@ class ContabilidadController
 
             // Query para obtener cabecera y líneas de la orden de compra
             $query = "
-            SELECT 
-                T0.\"DocEntry\" as \"docentry\", 
+            SELECT
+                T0.\"DocEntry\" as \"docentry\",
                 T0.\"DocNum\" as \"docnum\",
-                T0.\"CardCode\" as \"cardcode\", 
+                T0.\"CardCode\" as \"cardcode\",
                 T0.\"CardName\" as \"cardname\",
                 T0.\"DocDate\" as \"docdate\",
                 T0.\"DocTotal\" as \"doctotal\",
                 T0.\"Series\" as \"series\",
-                T1.\"LineNum\" as \"linenum\", 
+                T0.\"DocType\" as \"doctype\",
+                T1.\"LineNum\" as \"linenum\",
                 T1.\"ItemCode\" as \"itemcode\",
                 T1.\"Dscription\" as \"description\", 
                 T1.\"Quantity\" as \"quantity\",
@@ -2001,7 +2116,9 @@ class ContabilidadController
                 T1.\"AcctCode\" as \"acctcode\",
                 T1.\"OcrCode\" as \"costingcode\",
                 T1.\"OcrCode2\" as \"costingcode2\",
-                T1.\"OcrCode3\" as \"costingcode3\"
+                T1.\"OcrCode3\" as \"costingcode3\",
+                T1.\"LineStatus\" as \"linestatus\",
+                (T1.\"OpenSum\" + T1.\"VatSum\") as \"openlinetotal\"
             FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
             INNER JOIN \"T_GT_AGROCENTRO_2016\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
             WHERE T0.\"DocEntry\" = ? AND T0.\"CardCode\" = ?
@@ -2056,7 +2173,12 @@ class ContabilidadController
                         'cardname' => mb_convert_encoding($row['cardname'] ?? '', 'UTF-8', 'auto'),
                         'docdate' => $row['docdate'] ?? date('Y-m-d'),
                         'doctotal' => (float)($row['doctotal'] ?? 0),
-                        'series' => $row['series'] ?? null
+                        'series' => $row['series'] ?? null,
+                        // 'I' = orden de Artículos (maneja inventario real), 'S' = orden de Servicio.
+                        // Necesario para decidir si se puede enlazar vía BaseEntry más abajo en
+                        // enviarSAP(): SAP rechaza enlazar una factura de Servicio a una orden de
+                        // Artículos con "Base document type and target document type do not match".
+                        'doctype' => $row['doctype'] ?? null
                     ];
                 }
 
@@ -2075,7 +2197,17 @@ class ContabilidadController
                     'CostingCode3' => $costingCode3,
                     'BaseEntry' => (int)$docentry,
                     'BaseLine' => (int)($row['linenum'] ?? 0),
-                    'BaseType' => 22
+                    'BaseType' => 22,
+                    // 'O' (abierta) / 'C' (cerrada) en SAP. Se usa en enviarSAP() para no intentar
+                    // enlazar vía BaseEntry una línea con cantidad real que SAP ya cerró (rechaza
+                    // con "one of the base documents has already been closed").
+                    'LineStatus' => trim($row['linestatus'] ?? 'O'),
+                    // Saldo pendiente REAL de esta línea en SAP (OpenSum+VatSum). Se usa en
+                    // enviarSAP() para detectar cuándo una línea de monto fijo (Quantity=0) puede
+                    // enlazarse de verdad: si el monto de la factura coincide exacto con esto, no
+                    // hay riesgo de que SAP use "el total completo de la línea" en vez del monto
+                    // real — son el mismo número.
+                    'OpenLineTotal' => (float)($row['openlinetotal'] ?? 0)
                 ];
                 $lineNum++;
             }

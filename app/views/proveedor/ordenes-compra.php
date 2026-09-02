@@ -80,6 +80,7 @@
                     <th>N° Orden</th>
                     <th>Fecha</th>
                     <th>Monto</th>
+                    <th>Saldo Pendiente</th>
                     <th>Moneda</th>
                     <th>Estado</th>
                     <th>DocEntry SAP</th>
@@ -89,7 +90,7 @@
             <tbody>
                 <?php if (empty($ordenes)): ?>
                     <tr>
-                        <td colspan="7" style="text-align:center; padding:40px;">
+                        <td colspan="8" style="text-align:center; padding:40px;">
                             No se encontraron órdenes de compra con este filtro.
                         </td>
                     </tr>
@@ -99,6 +100,13 @@
                         <td><strong><?= htmlspecialchars($oc['numero_oc']) ?></strong></td>
                         <td><?= date('d/m/Y', strtotime($oc['fecha'])) ?></td>
                         <td>Q <?= number_format($oc['monto'], 2) ?></td>
+                        <td>
+                            <?php if (($oc['saldo_pendiente'] ?? 0) > 0.01): ?>
+                                <strong style="color:#006400;">Q <?= number_format($oc['saldo_pendiente'], 2) ?></strong>
+                            <?php else: ?>
+                                <span style="color:#999;">Q 0.00</span>
+                            <?php endif; ?>
+                        </td>
                         <td><?= htmlspecialchars($oc['moneda']) ?></td>
                         <td>
                             <span class="status <?= strtolower($oc['estado']) ?>">
@@ -117,6 +125,9 @@
                 <?php endif; ?>
             </tbody>
         </table>
+        <p style="font-size:0.85rem; color:#777; margin-top:10px;">
+            El <strong>Saldo Pendiente</strong> es el monto que SAP tiene disponible en este momento para esa orden — úsalo como referencia al reportar tu factura.
+        </p>
 
     <?php endif; ?>
 

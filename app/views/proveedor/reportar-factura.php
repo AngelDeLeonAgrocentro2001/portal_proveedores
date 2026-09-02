@@ -68,19 +68,46 @@ if (!empty($_POST['facturas_adicionales'])) {
             <?php if (empty($facturasSAT)): ?>
                 <p style="color: red;">No hay facturas disponibles para tu NIT.</p>
             <?php else: ?>
-                <select name="factura_sat" id="factura_sat" class="form-select" onchange="llenarFactura(this)">
-                    <option value="">-- Selecciona una factura SAT --</option>
-                    <?php foreach ($facturasSAT as $f): ?>
-                    <option value="<?= htmlspecialchars($f['serie'] . ' ' . $f['numero_dte']) ?>"
-                            data-fecha="<?= htmlspecialchars($f['fecha_emision'] ?? '') ?>"
-                            data-monto="<?= htmlspecialchars($f['gran_total'] ?? 0) ?>"
-                            <?= (isset($_POST['numero_factura']) && trim($_POST['numero_factura']) === trim($f['serie'] . ' ' . $f['numero_dte'])) ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($f['serie'] . '-' . $f['numero_dte']) ?> 
-                        | <?= date('d/m/Y', strtotime($f['fecha_emision'])) ?> 
-                        | Q <?= number_format($f['gran_total'] ?? 0, 2) ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
+                <?php
+                    $facturaSatPreseleccionada = null;
+                    if (isset($_POST['numero_factura'])) {
+                        foreach ($facturasSAT as $f) {
+                            if (trim($_POST['numero_factura']) === trim($f['serie'] . ' ' . $f['numero_dte'])) {
+                                $facturaSatPreseleccionada = $f;
+                                break;
+                            }
+                        }
+                    }
+                ?>
+                <!-- Combobox propio (input + lista filtrable) en vez de <select> nativo: permite
+                     buscar por número, fecha o monto con la lista de resultados visible debajo
+                     mientras se escribe, cosa que un <select> no puede hacer. -->
+                <div class="combo-factura-sat" style="position:relative;">
+                    <input type="text" id="buscarFacturaSAT" class="form-select" autocomplete="off"
+                           placeholder="-- Selecciona una factura SAT --"
+                           value="<?= $facturaSatPreseleccionada ? htmlspecialchars($facturaSatPreseleccionada['serie'] . '-' . $facturaSatPreseleccionada['numero_dte'] . ' | ' . date('d/m/Y', strtotime($facturaSatPreseleccionada['fecha_emision'])) . ' | Q ' . number_format($facturaSatPreseleccionada['gran_total'] ?? 0, 2)) : '' ?>"
+                           oninput="filtrarFacturaSAT(this.value)"
+                           onfocus="mostrarListaFacturaSAT()"
+                           onblur="ocultarListaFacturaSAT()">
+                    <input type="hidden" name="factura_sat" id="factura_sat_valor"
+                           value="<?= $facturaSatPreseleccionada ? htmlspecialchars($facturaSatPreseleccionada['serie'] . ' ' . $facturaSatPreseleccionada['numero_dte']) : '' ?>">
+                    <div id="listaFacturaSAT" class="combo-lista">
+                        <?php foreach ($facturasSAT as $f): ?>
+                        <?php
+                            $valor = $f['serie'] . ' ' . $f['numero_dte'];
+                            $textoMostrado = $f['serie'] . '-' . $f['numero_dte'] . ' | ' . date('d/m/Y', strtotime($f['fecha_emision'])) . ' | Q ' . number_format($f['gran_total'] ?? 0, 2);
+                        ?>
+                        <div class="combo-item"
+                             data-value="<?= htmlspecialchars($valor) ?>"
+                             data-fecha="<?= htmlspecialchars($f['fecha_emision'] ?? '') ?>"
+                             data-monto="<?= htmlspecialchars($f['gran_total'] ?? 0) ?>"
+                             data-texto="<?= htmlspecialchars($textoMostrado) ?>"
+                             onmousedown="seleccionarFacturaSAT(this)">
+                            <?= htmlspecialchars($textoMostrado) ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
             <?php endif; ?>
         </div>
 
@@ -136,11 +163,6 @@ if (!empty($_POST['facturas_adicionales'])) {
             
             <!-- Campo oculto para almacenar JSON de facturas adicionales -->
             <input type="hidden" name="facturas_adicionales" id="facturas_adicionales" value="[]">
-        </div>
-
-        <div class="form-group">
-            <label>Retención (Q) (si aplica)</label>
-            <input type="number" name="retencion" step="0.01" value="<?= htmlspecialchars($_POST['retencion'] ?? '0') ?>">
         </div>
 
         <!-- Órdenes de Compra / Entrada de Mercancía (material de empaque) -->
@@ -234,9 +256,16 @@ if (!empty($_POST['facturas_adicionales'])) {
                            data-numero="<?= htmlspecialchars($oc['numero_oc']) ?>"
                            data-monto="<?= $oc['monto'] ?>"
                            <?= in_array((string)$oc['docentry'], $ordenesSeleccionadasPrevias, true) ? 'checked' : '' ?>>
-                    <strong><?= htmlspecialchars($oc['numero_oc']) ?></strong> 
-                    - Q <?= number_format($oc['monto'], 2) ?> 
+                    <strong><?= htmlspecialchars($oc['numero_oc']) ?></strong>
+                    - Q <?= number_format($oc['monto'], 2) ?>
                     (<?= date('d/m/Y', strtotime($oc['fecha'])) ?>)
+                    <?php if (isset($oc['saldo_pendiente'])): ?>
+                        <?php if ($oc['saldo_pendiente'] > 0.01): ?>
+                            <span style="color:#006400;">— Saldo: Q <?= number_format($oc['saldo_pendiente'], 2) ?></span>
+                        <?php else: ?>
+                            <span style="color:#999;">— Saldo: Q 0.00</span>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </label>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -1058,38 +1087,63 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// ==================== AUTOCOMPLETADO FACTURA SAT ====================
-function llenarFactura(select) {
-    const option = select.options[select.selectedIndex];
-    if (!option || !option.value) return;
-
-    document.getElementById('numero_factura').value = option.value.trim();
-    const fecha = option.getAttribute('data-fecha');
-    if (fecha) document.getElementById('fecha_emision').value = fecha.substring(0, 10);
-    const monto = option.getAttribute('data-monto');
-    if (monto) document.getElementById('monto').value = parseFloat(monto).toFixed(2);
+// ==================== AUTOCOMPLETADO FACTURA SAT (combobox propio) ====================
+// Reemplaza el <select> nativo: un input de texto + una lista de resultados (div) que se
+// filtra en vivo mientras se escribe y queda visible debajo del input, en vez de abrir el
+// desplegable nativo del navegador con todas las facturas.
+function mostrarListaFacturaSAT() {
+    const lista = document.getElementById('listaFacturaSAT');
+    if (lista) lista.style.display = 'block';
 }
 
-// Autocompletado desde preselección
+function ocultarListaFacturaSAT() {
+    // pequeño retraso para que el mousedown del onmousedown de seleccionarFacturaSAT() alcance
+    // a ejecutarse antes de que el blur del input oculte la lista.
+    setTimeout(function () {
+        const lista = document.getElementById('listaFacturaSAT');
+        if (lista) lista.style.display = 'none';
+    }, 150);
+}
+
+// Cada item ya muestra "SERIE-NUMERO | fecha | monto" (guardado en data-texto), así que una
+// sola búsqueda de texto sobre eso cubre número, fecha y monto a la vez.
+function filtrarFacturaSAT(texto) {
+    const filtro = texto.trim().toLowerCase();
+    document.querySelectorAll('#listaFacturaSAT .combo-item').forEach(function (item) {
+        const texto = item.getAttribute('data-texto').toLowerCase();
+        item.style.display = (filtro === '' || texto.includes(filtro)) ? '' : 'none';
+    });
+    // Al escribir, si ya había una factura seleccionada, se invalida hasta elegir una de la
+    // lista de nuevo — evita enviar un numero_factura que ya no coincide con lo escrito.
+    document.getElementById('factura_sat_valor').value = '';
+}
+
+function seleccionarFacturaSAT(item) {
+    document.getElementById('buscarFacturaSAT').value = item.getAttribute('data-texto');
+    document.getElementById('factura_sat_valor').value = item.getAttribute('data-value');
+    document.getElementById('numero_factura').value = item.getAttribute('data-value').trim();
+
+    const fecha = item.getAttribute('data-fecha');
+    if (fecha) document.getElementById('fecha_emision').value = fecha.substring(0, 10);
+    const monto = item.getAttribute('data-monto');
+    if (monto) document.getElementById('monto').value = parseFloat(monto).toFixed(2);
+
+    document.getElementById('listaFacturaSAT').style.display = 'none';
+}
+
+// Autocompletado desde preselección (llegada por ?preseleccion=... en la URL)
 document.addEventListener('DOMContentLoaded', function() {
     const preseleccion = '<?= addslashes($preseleccion ?? '') ?>'.trim();
-    
+
     if (preseleccion) {
         document.getElementById('numero_factura').value = preseleccion;
 
-        const select = document.getElementById('factura_sat');
-        if (select) {
-            for (let i = 0; i < select.options.length; i++) {
-                const option = select.options[i];
-                if (option.value.trim() === preseleccion || option.value.includes(preseleccion)) {
-                    const fecha = option.getAttribute('data-fecha');
-                    const monto = option.getAttribute('data-monto');
-
-                    if (fecha) document.getElementById('fecha_emision').value = fecha.substring(0, 10);
-                    if (monto) document.getElementById('monto').value = parseFloat(monto).toFixed(2);
-                    select.value = option.value;
-                    break;
-                }
+        const items = document.querySelectorAll('#listaFacturaSAT .combo-item');
+        for (let i = 0; i < items.length; i++) {
+            const valor = items[i].getAttribute('data-value');
+            if (valor.trim() === preseleccion || valor.includes(preseleccion)) {
+                seleccionarFacturaSAT(items[i]);
+                break;
             }
         }
     }
@@ -1186,6 +1240,39 @@ document.addEventListener('DOMContentLoaded', function() {
     margin: 15px 0;
     max-height: 400px;
     overflow-y: auto;
+}
+
+/* Combobox de Factura SAT: lista de resultados que aparece debajo del input mientras se
+   escribe, en vez del desplegable nativo del navegador. */
+.combo-lista {
+    display: none;
+    position: absolute;
+    z-index: 20;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    max-height: 280px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.combo-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.combo-item:last-child {
+    border-bottom: none;
+}
+
+.combo-item:hover {
+    background: #f0f8f0;
 }
 
 .form-select {

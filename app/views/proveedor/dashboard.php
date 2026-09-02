@@ -46,7 +46,7 @@ $mostrarResumen = in_array($rol, ['admin', 'consultas']);
             <div class="card">
                 <div class="card-icon">⏳</div>
                 <h3>Pendientes</h3>
-                <p class="big-number"><?= ($resumen['reportadas'] ?? 0) + ($resumen['total'] - ($resumen['pagadas'] ?? 0)) ?></p>
+                <p class="big-number"><?= $resumen['pendientes'] ?? 0 ?></p>
                 <small>Q <?= number_format($resumen['monto_pendiente'] ?? 0, 2) ?></small>
             </div>
             <div class="card">

@@ -229,9 +229,20 @@ class IngresoManualController {
             }
             
             error_log("Contraseña generada: $contrasena");
-            
-            // Calcular fecha de pago esperada (viernes +30 días)
-            $fecha_pago_esperada = $this->calcularFechaPago($fecha_inicio_credito);
+
+            // Días de crédito reales del proveedor (desde SAP, con el valor local como
+            // respaldo) — antes esto siempre usaba 30 fijo, sin importar el proveedor.
+            $proveedorModel = new ProveedorModel();
+            $diasCreditoSAP = $proveedorModel->getDiasCreditoSAP($cardcode);
+            if ($diasCreditoSAP !== null) {
+                $diasCredito = $diasCreditoSAP;
+            } else {
+                $proveedorLocal = $proveedorModel->getProveedorByCardcode($cardcode);
+                $diasCredito = $proveedorLocal['dias_credito'] ?? 30;
+            }
+
+            // Calcular fecha de pago esperada (viernes + días de crédito reales)
+            $fecha_pago_esperada = $this->calcularFechaPago($fecha_inicio_credito, $diasCredito);
             
             $ordenes_json = json_encode($ordenes_seleccionadas);
             
@@ -322,10 +333,10 @@ class IngresoManualController {
         }
     }
     
-    private function calcularFechaPago($fecha_base) {
+    private function calcularFechaPago($fecha_base, $dias_credito = 30) {
         $fecha = new DateTime($fecha_base);
-        $fecha->modify("+30 days");
-        
+        $fecha->modify("+{$dias_credito} days");
+
         $diaSemana = (int)$fecha->format('N');
         if ($diaSemana !== 5) {
             $diasHastaViernes = (5 - $diaSemana + 7) % 7;

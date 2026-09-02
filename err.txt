@@ -1,0 +1,54 @@
+=== Por DocEntry 556734 ===
+stdClass Object
+(
+    [DocEntry] => 556734
+    [DocNum] => 21307560
+    [DocDate] => 2026-09-02 00:00:00.000000000
+    [CardCode] => PN0215
+    [CardName] => Metales del Sur, S. A.
+    [DocTotal] => 752.500000
+    [NumAtCard] => 9DD5A3EB 1595952214-1
+    [CANCELED] => N
+    [DocStatus] => O
+)
+
+=== Por NumAtCard LIKE %9DD5A3EB% ===
+stdClass Object
+(
+    [DocEntry] => 540996
+    [DocNum] => 74000389
+    [DocDate] => 2026-04-21 00:00:00.000000000
+    [CardCode] => PN0215
+    [CardName] => Metales del Sur, S. A.
+    [DocTotal] => 752.500000
+    [NumAtCard] => 9DD5A3EB 1595952214
+    [CANCELED] => N
+    [DocStatus] => C
+)
+
+stdClass Object
+(
+    [DocEntry] => 556732
+    [DocNum] => 21307559
+    [DocDate] => 2026-09-01 00:00:00.000000000
+    [CardCode] => PN0215
+    [CardName] => Metales del Sur, S. A.
+    [DocTotal] => 752.490000
+    [NumAtCard] => 9DD5A3EB 1595952214-19
+    [CANCELED] => N
+    [DocStatus] => O
+)
+
+stdClass Object
+(
+    [DocEntry] => 556734
+    [DocNum] => 21307560
+    [DocDate] => 2026-09-02 00:00:00.000000000
+    [CardCode] => PN0215
+    [CardName] => Metales del Sur, S. A.
+    [DocTotal] => 752.500000
+    [NumAtCard] => 9DD5A3EB 1595952214-1
+    [CANCELED] => N
+    [DocStatus] => O
+)
+

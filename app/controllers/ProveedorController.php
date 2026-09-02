@@ -105,6 +105,18 @@ class ProveedorController
             ? $proveedorModel->getEntradasMercanciaFlatByCardcode($cardcode, 'abierta')
             : $proveedorModel->getOrdenesCompraByCardcode($cardcode, 'abierta');
 
+        // Saldo pendiente real en SAP por orden (1 sola consulta para toda la lista), para que el
+        // proveedor vea cuánto le queda disponible al elegir la orden a la que va a enlazar su
+        // factura — igual que en "Mis Órdenes de Compra". No aplica a Entrada de Mercancía
+        // (OPDN/PDN1, otra numeración de DocEntry).
+        if (!$esMaterialEmpaque) {
+            $saldosPendientes = $proveedorModel->getSaldosPendientesSAP(array_column($ordenesAbiertas, 'docentry'));
+            foreach ($ordenesAbiertas as &$oc) {
+                $oc['saldo_pendiente'] = $saldosPendientes[(int)$oc['docentry']] ?? 0.0;
+            }
+            unset($oc);
+        }
+
         // Verificar si el proveedor está en el grupo de doble factura
         $pdo = DatabasePortal::getInstance()->getPdo();
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM proveedores_doble_factura WHERE cardcode = ? AND activo = 1");
@@ -481,6 +493,14 @@ HTML;
         } else {
             $ordenes = $model->getOrdenesCompraByCardcode($cardcode, $estadoFiltro);
             $totalMonto = array_sum(array_column($ordenes, 'monto'));
+
+            // Saldo pendiente real en SAP por orden (1 sola consulta para toda la lista), para que
+            // el proveedor vea cuánto le queda disponible antes de elegirla al reportar su factura.
+            $saldosPendientes = $model->getSaldosPendientesSAP(array_column($ordenes, 'docentry'));
+            foreach ($ordenes as &$oc) {
+                $oc['saldo_pendiente'] = $saldosPendientes[(int)$oc['docentry']] ?? 0.0;
+            }
+            unset($oc);
         }
 
         require_once BASE_PATH . 'app/views/layout/header.php';
