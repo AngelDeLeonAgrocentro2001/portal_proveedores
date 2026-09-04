@@ -397,6 +397,11 @@
                                     <strong style="color: #006400; font-size: 1rem;">
                                         Q <?= number_format($f['monto'], 2) ?>
                                     </strong>
+                                    <?php if ($f['coincide_saldo_pendiente'] === false): ?>
+                                        <br><span class="status-badge" style="background:#fff3cd; color:#856404; margin-top:4px;" title="El monto no coincide con el saldo pendiente de la orden en SAP">⚠️ Revisar saldo</span>
+                                    <?php elseif ($f['coincide_saldo_pendiente'] === true): ?>
+                                        <br><span class="status-badge" style="background:#d4edda; color:#155724; margin-top:4px;" title="Coincide con el saldo pendiente de la orden en SAP">✅ Coincide</span>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
                                     <?php if (!empty($f['contrasena_pago']) && empty($f['contrasena_cancelada'])): ?>

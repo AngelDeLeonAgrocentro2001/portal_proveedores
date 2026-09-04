@@ -271,12 +271,35 @@ class AdminController {
         $proveedorModel = new ProveedorModel();
 
         $comparacionOrden = null;
+        $detalleSaldoPendienteAutorizacion = null;
         if ($factura) {
             $esMaterialEmpaque = ($factura['tipo_proveedor'] ?? '') === 'material_empaque';
             $montoOrdenes = $esMaterialEmpaque
                 ? $proveedorModel->getMontoEntradaMercanciaRelacionada($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null)
                 : $proveedorModel->getMontoOrdenesRelacionadas($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null);
             $comparacionOrden = $this->armarComparacionOrden($factura['monto'] ?? 0, $montoOrdenes, $esMaterialEmpaque);
+
+            // Para el momento de AUTORIZAR (Acciones de Compras): si el monto de la factura
+            // coincide con el saldo pendiente real en SAP de la(s) orden(es) seleccionadas, no se
+            // muestra nada y Compras sigue el flujo normal (botones de aprobar/rechazar de
+            // siempre). Si NO coincide, se le muestra el detalle línea por línea del saldo
+            // pendiente de esas órdenes, para que decida con esa información. No aplica a
+            // material_empaque (Entrada de Mercancía, otra numeración de DocEntry en SAP).
+            if (!$esMaterialEmpaque) {
+                $docentries = array_values(array_filter(array_map('intval', (array)json_decode($factura['ordenes_relacionadas'] ?? '[]', true))));
+                if (!empty($docentries)) {
+                    $detalleSaldos = $proveedorModel->getDetalleSaldoPendienteSAP($docentries);
+                    $totalSaldoPendiente = array_sum(array_column($detalleSaldos, 'total'));
+                    $diferenciaSaldo = round((float)($factura['monto'] ?? 0) - $totalSaldoPendiente, 2);
+                    if (abs($diferenciaSaldo) > 0.01) {
+                        $detalleSaldoPendienteAutorizacion = [
+                            'detalle' => $detalleSaldos,
+                            'total_saldo_pendiente' => $totalSaldoPendiente,
+                            'diferencia' => $diferenciaSaldo
+                        ];
+                    }
+                }
+            }
         }
 
         // Misma etiqueta pero para cada fila de la tabla "Últimas Facturas Reportadas".
@@ -493,25 +516,45 @@ public function getOrdenesDisponibles() {
     $factura_id = $_POST['factura_id'] ?? 0;
     $comentarios = $_POST['comentarios'] ?? '';
     $usuario = $_SESSION['admin_agrosistemas_user'] ?? ($_SESSION['user']['username'] ?? 'compras');
-    
+
+    // Línea de la orden que Compras marcó en el detalle de saldo pendiente (cuando el monto de
+    // la factura no coincidía con el saldo pendiente y se le mostró el desglose). Es solo
+    // trazabilidad para que Contabilidad vea contra qué línea consideró Compras que va la
+    // factura — no cambia cómo se arma ni se enlaza el envío a SAP.
+    $lineaSeleccionadaRaw = trim($_POST['linea_seleccionada'] ?? '');
+    $lineaSeleccionadaJson = null;
+    if ($lineaSeleccionadaRaw !== '' && strpos($lineaSeleccionadaRaw, ':') !== false) {
+        [$docentrySel, $linenumSel] = explode(':', $lineaSeleccionadaRaw, 2);
+        $lineaSeleccionadaJson = json_encode([
+            'docentry' => (int)$docentrySel,
+            'linenum' => (int)$linenumSel,
+            'docnum' => trim($_POST['linea_docnum'] ?? ''),
+            'descripcion' => trim($_POST['linea_descripcion'] ?? ''),
+            'saldo_pendiente' => (float)($_POST['linea_saldo'] ?? 0),
+            'seleccionado_por' => $usuario,
+            'fecha' => date('Y-m-d H:i:s')
+        ]);
+    }
+
     if (!$factura_id) {
         echo json_encode(['success' => false, 'message' => 'ID de factura no válido']);
         exit;
     }
-    
+
     try {
         // Cambiar estado a 'aprobada_compras' (pasa a Contabilidad)
         // NOTA: Ahora Contabilidad es quien envía a SAP, no Finanzas
         $stmt = $this->pdo->prepare("
-            UPDATE facturas 
+            UPDATE facturas
             SET estado = 'aprobada_compras',
                 aprobado_por_compras = ?,
                 fecha_aprobacion_compras = NOW(),
-                comentarios_compras = CONCAT(IFNULL(comentarios_compras, ''), '\n[', NOW(), '] ', ?, ' Aprobada por Compras: ', ?)
+                comentarios_compras = CONCAT(IFNULL(comentarios_compras, ''), '\n[', NOW(), '] ', ?, ' Aprobada por Compras: ', ?),
+                linea_seleccionada_compras = COALESCE(?, linea_seleccionada_compras)
             WHERE id = ?
         ");
-        
-        if ($stmt->execute([$usuario, $usuario, $comentarios, $factura_id])) {
+
+        if ($stmt->execute([$usuario, $usuario, $comentarios, $lineaSeleccionadaJson, $factura_id])) {
             echo json_encode(['success' => true, 'message' => 'Factura aprobada correctamente. Pasa a Contabilidad para registro en SAP.']);
         } else {
             echo json_encode(['success' => false, 'message' => 'Error al aprobar']);

@@ -66,12 +66,21 @@
     <?php else: ?>
 
         <!-- Resumen Total -->
-        <div class="summary-box">
-            <strong>Total de Órdenes:</strong>
-            <span style="font-size:1.8rem; color:#006400;">
-                Q <?= number_format($totalMonto ?? 0, 2) ?>
-            </span>
-            <small>(<?= count($ordenes) ?> órdenes)</small>
+        <div class="summary-box" style="display:flex; justify-content:center; gap:40px; flex-wrap:wrap;">
+            <div>
+                <strong>Total de Órdenes:</strong>
+                <span style="font-size:1.8rem; color:#006400;">
+                    Q <?= number_format($totalMonto ?? 0, 2) ?>
+                </span>
+                <small>(<?= count($ordenes) ?> órdenes)</small>
+            </div>
+            <div>
+                <strong>Saldo Pendiente:</strong>
+                <span style="font-size:1.8rem; color:#b45309;">
+                    Q <?= number_format($totalSaldoPendiente ?? 0, 2) ?>
+                </span>
+                
+            </div>
         </div>
 
             <table class="data-table">

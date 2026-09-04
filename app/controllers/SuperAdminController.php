@@ -173,15 +173,27 @@ class SuperAdminController {
         $tipoSupervisor = trim($_POST['tipo_supervisor'] ?? '') ?: null;
         $area = trim($_POST['area'] ?? '') ?: null;
 
-        if ($cardcode === '' || $email === '' || $username === '' || $password === '') {
-            $this->flash('error', 'CardCode, correo, usuario y contraseña son obligatorios');
+        // Los autorizadores de Finanzas y Contabilidad son personal interno de Agrocentro, no
+        // están ligados a ningún proveedor específico — no tiene sentido pedirles un CardCode.
+        // La columna usuarios.cardcode tiene FOREIGN KEY hacia proveedores.cardcode (no admite
+        // vacío ni un valor que no exista), así que en vez de dejarlo en blanco se usa el
+        // proveedor centinela 'INTERNO' (creado para este fin, estado inactivo para que no
+        // aparezca en listados de proveedores reales).
+        $rolesSinCardcode = ['supervisor_finanzas', 'contabilidad'];
+        $requiereCardcode = !in_array($rol, $rolesSinCardcode, true);
+
+        if (($requiereCardcode && $cardcode === '') || $email === '' || $username === '' || $password === '') {
+            $this->flash('error', 'Correo, usuario y contraseña son obligatorios' . ($requiereCardcode ? ' (y CardCode)' : ''));
             $this->redirectDashboard();
         }
         if (!in_array($rol, self::ROLES_VALIDOS, true)) {
             $this->flash('error', 'Rol inválido');
             $this->redirectDashboard();
         }
-        if (!$this->model->cardcodeExiste($cardcode)) {
+        if (!$requiereCardcode && $cardcode === '') {
+            $cardcode = 'INTERNO';
+        }
+        if ($requiereCardcode && !$this->model->cardcodeExiste($cardcode)) {
             $this->flash('error', "El CardCode '$cardcode' no existe en Proveedores. Créalo primero.");
             $this->redirectDashboard();
         }
@@ -217,9 +229,15 @@ class SuperAdminController {
             $this->redirectDashboard();
         }
 
+        $rolesSinCardcode = ['supervisor_finanzas', 'contabilidad'];
+        $cardcodePost = trim($_POST['cardcode'] ?? '');
+        if (in_array($rol, $rolesSinCardcode, true) && $cardcodePost === '') {
+            $cardcodePost = 'INTERNO';
+        }
+
         $password = $_POST['password'] ?? '';
         $data = [
-            'cardcode' => trim($_POST['cardcode'] ?? ''),
+            'cardcode' => $cardcodePost,
             'email' => trim($_POST['email'] ?? ''),
             'username' => trim($_POST['username'] ?? ''),
             'rol' => $rol,

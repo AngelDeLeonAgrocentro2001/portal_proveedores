@@ -288,6 +288,7 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
         'contrasena' => $contrasena,
         'esLunes' => $esLunes,
         'proximoLunes' => $proximoLunesStr,
+        'diasCredito' => $diasCredito,
         'mensaje_adicional' => $mensaje_adicional,
         'viajes_marcados' => $viajes_marcados
     ];

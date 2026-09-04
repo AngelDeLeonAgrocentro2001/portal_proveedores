@@ -171,7 +171,7 @@ class ProveedorModel {
         }
     }
 
-    // Saldo pendiente REAL en SAP de un conjunto de órdenes de compra: suma de OpenSum+VatSum de
+    // Saldo pendiente REAL en SAP de un conjunto de órdenes de compra: suma de OpenSum*(1+VatPrcnt/100) de
     // las líneas que siguen abiertas (LineStatus='O') de cada orden. A diferencia del "monto"
     // (DocTotal original) que ya se muestra en "Mis Órdenes de Compra", esto refleja lo que SAP
     // considera realmente disponible en este momento — útil para que el proveedor elija una orden
@@ -189,7 +189,7 @@ class ProveedorModel {
 
             $placeholders = implode(',', array_fill(0, count($docentries), '?'));
             $query = "
-                SELECT T1.\"DocEntry\" AS \"docentry\", SUM(T1.\"OpenSum\" + T1.\"VatSum\") AS \"saldopendiente\"
+                SELECT T1.\"DocEntry\" AS \"docentry\", SUM(T1.\"OpenSum\" * (1 + (T1.\"VatPrcnt\" / 100))) AS \"saldopendiente\"
                 FROM \"T_GT_AGROCENTRO_2016\".POR1 T1
                 WHERE T1.\"DocEntry\" IN ($placeholders) AND T1.\"LineStatus\" = 'O'
                 GROUP BY T1.\"DocEntry\"
@@ -211,6 +211,61 @@ class ProveedorModel {
             return $saldos;
         } catch (Exception $e) {
             error_log("Error al consultar saldos pendientes SAP: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    // Detalle línea por línea del saldo pendiente real en SAP de un conjunto de órdenes de
+    // compra (solo líneas abiertas, LineStatus='O') — para mostrarle al autorizador (Compras)
+    // por qué el monto de una factura no coincide con el saldo pendiente de la orden que
+    // seleccionó. Una sola consulta para todas las órdenes. Devuelve
+    // [docentry => ['docnum'=>, 'lineas'=>[['linenum','descripcion','saldo_pendiente'], ...], 'total'=>...]].
+    public function getDetalleSaldoPendienteSAP(array $docentries) {
+        $docentries = array_values(array_unique(array_filter(array_map('intval', $docentries))));
+        if (empty($docentries)) {
+            return [];
+        }
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+
+            $placeholders = implode(',', array_fill(0, count($docentries), '?'));
+            $query = "
+                SELECT T1.\"DocEntry\" AS \"docentry\", T0.\"DocNum\" AS \"docnum\", T1.\"LineNum\" AS \"linenum\",
+                       T1.\"Dscription\" AS \"descripcion\",
+                       (T1.\"OpenSum\" * (1 + (T1.\"VatPrcnt\" / 100))) AS \"saldopendiente\"
+                FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
+                INNER JOIN \"T_GT_AGROCENTRO_2016\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+                WHERE T1.\"DocEntry\" IN ($placeholders) AND T1.\"LineStatus\" = 'O'
+                ORDER BY T1.\"DocEntry\", T1.\"LineNum\"
+            ";
+
+            $stmt = odbc_prepare($conexion, $query);
+            if (!$stmt || !odbc_execute($stmt, $docentries)) {
+                throw new Exception("Error ejecutando consulta: " . odbc_errormsg($conexion));
+            }
+
+            $detalle = [];
+            while ($row = odbc_fetch_object($stmt)) {
+                $docentry = (int)$row->docentry;
+                if (!isset($detalle[$docentry])) {
+                    $detalle[$docentry] = ['docnum' => $row->docnum ?? '', 'lineas' => [], 'total' => 0.0];
+                }
+                $saldoLinea = (float)$row->saldopendiente;
+                $detalle[$docentry]['lineas'][] = [
+                    'linenum' => (int)$row->linenum,
+                    'descripcion' => mb_convert_encoding(trim($row->descripcion ?? ''), 'UTF-8', 'auto'),
+                    'saldo_pendiente' => $saldoLinea
+                ];
+                $detalle[$docentry]['total'] += $saldoLinea;
+            }
+
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            return $detalle;
+        } catch (Exception $e) {
+            error_log("Error al consultar detalle de saldo pendiente SAP: " . $e->getMessage());
             return [];
         }
     }

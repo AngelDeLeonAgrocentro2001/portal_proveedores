@@ -1120,7 +1120,8 @@ class ContabilidadController
         // factura no coincide con el saldo pendiente real de la línea, SAP ignora el precio que
         // enviamos y usa el total completo de la línea. PERO si el monto de la factura coincide
         // exacto (con centavos de tolerancia) con el saldo pendiente real de SAP (OpenLineTotal =
-        // OpenSum+VatSum) de una línea abierta, ese riesgo desaparece — lo que SAP termine usando
+        // OpenSum + su IVA, calculado como OpenSum*(1+VatPrcnt/100)) de una línea abierta, ese
+        // riesgo desaparece — lo que SAP termine usando
         // es el mismo número que ya íbamos a facturar — así que SÍ se enlaza, para que la orden
         // cierre de verdad en SAP. Solo se hace si NO hay ya líneas con cantidad real enlazadas
         // (no se mezclan los dos mecanismos) y solo si hay EXACTAMENTE una línea que calza — si
@@ -1140,16 +1141,45 @@ class ContabilidadController
             }
         }
 
+        // Si Compras marcó manualmente una línea específica en el detalle de saldo pendiente
+        // (porque el monto no coincidía exacto con ninguna), se fuerza el enlace real (BaseEntry)
+        // a esa línea aunque el monto no calce — riesgo aceptado explícitamente: para líneas de
+        // monto fijo (Quantity=0) SAP podría ignorar el precio enviado y usar el total completo
+        // de la línea en vez del monto real de la factura. Solo aplica si no hubo ya un enlace
+        // automático (por cantidad real o coincidencia exacta) y si la línea sigue siendo
+        // elegible (abierta, no material_empaque, no orden de Artículos — esto último SÍ es
+        // obligatorio: SAP rechaza esos casos sin excepción, no es un riesgo que se pueda asumir).
+        $lineaSeleccionadaPorCompras = null;
+        if ($totalQuantityEnlazada == 0 && $lineaMontoFijoParaCerrar === null) {
+            $seleccion = json_decode($factura['linea_seleccionada_compras'] ?? 'null', true);
+            if (is_array($seleccion) && (int)($seleccion['docentry'] ?? 0) === (int)$docentry) {
+                foreach ($lineasOrden as $linea) {
+                    if ($linea['LineNum'] === (int)($seleccion['linenum'] ?? -1)) {
+                        $lineaAbierta = ($linea['LineStatus'] ?? 'O') === 'O';
+                        if ($lineaAbierta && !$esMaterialEmpaque && !$esOrdenDeArticulos) {
+                            $lineaSeleccionadaPorCompras = $linea['LineNum'];
+                            error_log("Documento $docentry línea {$linea['LineNum']}: enlace forzado por selección manual de Compras (monto no coincide exacto, riesgo aceptado).");
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        $lineaForzarEnlace = $lineaMontoFijoParaCerrar ?? $lineaSeleccionadaPorCompras;
+
         $documentLines = [];
 
-        if ($lineaMontoFijoParaCerrar !== null) {
-            // Caso especial: el monto de la factura coincide exacto con el saldo pendiente de UNA
-            // sola línea de monto fijo. Esta factura es SOLO para cerrar esa línea puntual — no se
-            // mezclan las demás líneas de la orden (pueden estar cerradas por facturas anteriores
-            // sin relación con esta), para no duplicar ni repartir de más el monto de la factura.
+        if ($lineaForzarEnlace !== null) {
+            // Caso especial: se enlaza UNA sola línea de monto fijo vía BaseEntry — ya sea porque
+            // el monto de la factura coincide exacto con su saldo pendiente (seguro), o porque
+            // Compras la marcó manualmente en el detalle de saldo pendiente aceptando el riesgo
+            // de que el monto no calce exacto. Esta factura es SOLO para esa línea puntual — no
+            // se mezclan las demás líneas de la orden (pueden estar cerradas por facturas
+            // anteriores sin relación con esta), para no duplicar ni repartir de más el monto.
             $lineaCerrar = null;
             foreach ($lineasOrden as $linea) {
-                if ($linea['LineNum'] === $lineaMontoFijoParaCerrar) {
+                if ($linea['LineNum'] === $lineaForzarEnlace) {
                     $lineaCerrar = $linea;
                     break;
                 }
@@ -1168,12 +1198,16 @@ class ContabilidadController
                 "CostingCode3" => $lineaCerrar['CostingCode3'] ?? '',
                 "DiscountPercent" => 0,
                 "BaseEntry" => (int)$docentry,
-                "BaseLine" => (int)($lineaCerrar['BaseLine'] ?? $lineaMontoFijoParaCerrar),
+                "BaseLine" => (int)($lineaCerrar['BaseLine'] ?? $lineaForzarEnlace),
                 "BaseType" => 22
             ];
             // Ya quedó enlazada de verdad vía BaseEntry — SAP se encarga de cerrarla, no hace
             // falta el control de saldo local (que es solo para líneas que SAP no puede ver).
             $ordenEsMontoFijo = false;
+
+            if ($lineaSeleccionadaPorCompras !== null && $lineaMontoFijoParaCerrar === null) {
+                error_log("Documento $docentry línea $lineaForzarEnlace: enviando enlazada por selección manual de Compras. Monto factura=$docTotal, saldo pendiente de la línea=" . ($lineaCerrar['OpenLineTotal'] ?? 'N/D') . ". Verificar en SAP que el monto quede correcto.");
+            }
         } else {
             // Las líneas SIN enlazar no tienen cantidad para prorratear el monto — si a cada una
             // se le pusiera el monto completo de la factura (como antes), el total enviado a SAP
@@ -1244,7 +1278,7 @@ class ContabilidadController
         // ========== CONTROL DE SALDO PARA LÍNEAS SIN ENLAZAR (monto fijo o ya cerradas) ==========
         // Como estas líneas no se enlazan vía BaseEntry, SAP no descuenta su saldo automáticamente
         // con esta factura. El saldo base ya NO es el DocTotal original de la orden: se consulta
-        // el saldo pendiente REAL en SAP (OpenSum+VatSum de líneas abiertas de POR1), que ya
+        // el saldo pendiente REAL en SAP (OpenSum*(1+VatPrcnt/100) de líneas abiertas de POR1), que ya
         // refleja cualquier consumo fuera del portal. A eso se le resta lo que el portal mismo ya
         // envió (que SAP no ve, por no estar enlazado). Para Entrada de Mercancía (material_empaque)
         // el DocEntry pertenece a OPDN/PDN1, no a OPOR/POR1 — otra secuencia de numeración — así que
@@ -2055,7 +2089,7 @@ class ContabilidadController
         return (float)$stmt->fetchColumn();
     }
 
-    // Saldo pendiente REAL de la orden según SAP: suma de OpenSum+VatSum de sus líneas abiertas
+    // Saldo pendiente REAL de la orden según SAP: suma de OpenSum*(1+VatPrcnt/100) de sus líneas abiertas
     // (LineStatus='O'). A diferencia del DocTotal original de la orden, este número ya refleja
     // cualquier consumo que SAP conozca (por ejemplo, documentos creados directamente en SAP,
     // fuera del portal). Devuelve null si no se pudo consultar o la orden no tiene líneas abiertas
@@ -2067,7 +2101,7 @@ class ContabilidadController
             $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
 
             $query = "
-                SELECT SUM(T1.\"OpenSum\" + T1.\"VatSum\") as \"totalpendiente\"
+                SELECT SUM(T1.\"OpenSum\" * (1 + (T1.\"VatPrcnt\" / 100))) as \"totalpendiente\"
                 FROM \"T_GT_AGROCENTRO_2016\".POR1 T1
                 WHERE T1.\"DocEntry\" = ? AND T1.\"LineStatus\" = 'O'
             ";
@@ -2118,7 +2152,7 @@ class ContabilidadController
                 T1.\"OcrCode2\" as \"costingcode2\",
                 T1.\"OcrCode3\" as \"costingcode3\",
                 T1.\"LineStatus\" as \"linestatus\",
-                (T1.\"OpenSum\" + T1.\"VatSum\") as \"openlinetotal\"
+                (T1.\"OpenSum\" * (1 + (T1.\"VatPrcnt\" / 100))) as \"openlinetotal\"
             FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
             INNER JOIN \"T_GT_AGROCENTRO_2016\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
             WHERE T0.\"DocEntry\" = ? AND T0.\"CardCode\" = ?
@@ -2202,7 +2236,7 @@ class ContabilidadController
                     // enlazar vía BaseEntry una línea con cantidad real que SAP ya cerró (rechaza
                     // con "one of the base documents has already been closed").
                     'LineStatus' => trim($row['linestatus'] ?? 'O'),
-                    // Saldo pendiente REAL de esta línea en SAP (OpenSum+VatSum). Se usa en
+                    // Saldo pendiente REAL de esta línea en SAP (OpenSum*(1+VatPrcnt/100)). Se usa en
                     // enviarSAP() para detectar cuándo una línea de monto fijo (Quantity=0) puede
                     // enlazarse de verdad: si el monto de la factura coincide exacto con esto, no
                     // hay riesgo de que SAP use "el total completo de la línea" en vez del monto

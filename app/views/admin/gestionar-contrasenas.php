@@ -10,6 +10,11 @@
     <title>Agrosistemas - Gestión de Contraseñas y Autorizaciones</title>
     <link rel="stylesheet" href="/portal_proveedores/public/assets/css/style.css">
     <style>
+        .alerta-saldo { background: #fff8e6; border: 1px solid #ffe08a; border-left: 5px solid #b45309; border-radius: 8px; padding: 18px 20px; margin-bottom: 20px; }
+        .alerta-saldo h3 { font-size: 1.05rem; color: #856404; }
+        .alerta-saldo .data-table { width: 100%; border-collapse: collapse; background: white; }
+        .alerta-saldo .data-table th, .alerta-saldo .data-table td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 0.9rem; }
+
         .admin-header {
             background: linear-gradient(135deg, var(--dark-bg) 0%, #16301f 100%);
             color: white;
@@ -569,6 +574,20 @@
                         </td>
                     </tr>
                     <?php endif; ?>
+                    <?php $lineaSeleccionadaCompras = json_decode($factura['linea_seleccionada_compras'] ?? 'null', true); ?>
+                    <?php if (!empty($lineaSeleccionadaCompras)): ?>
+                    <tr>
+                        <td><strong>Línea seleccionada por Compras:</strong></td>
+                        <td>
+                            Orden <?= htmlspecialchars($lineaSeleccionadaCompras['docnum'] ?? '') ?>
+                            (DocEntry <?= (int)($lineaSeleccionadaCompras['docentry'] ?? 0) ?>),
+                            línea #<?= (int)($lineaSeleccionadaCompras['linenum'] ?? 0) ?>
+                            — <?= htmlspecialchars($lineaSeleccionadaCompras['descripcion'] ?? '') ?>
+                            (saldo pendiente al momento: Q <?= number_format($lineaSeleccionadaCompras['saldo_pendiente'] ?? 0, 2) ?>)
+                            <br><small style="color:#666;">Marcada por <?= htmlspecialchars($lineaSeleccionadaCompras['seleccionado_por'] ?? '') ?> el <?= htmlspecialchars($lineaSeleccionadaCompras['fecha'] ?? '') ?></small>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
                     <?php if (!empty($factura['fecha_inicio_credito'])): ?>
                     <tr>
                         <td><strong>Fecha Inicio Crédito:</strong></td>
@@ -643,6 +662,62 @@
                                 Motivo: <?= htmlspecialchars($factura['motivo_rechazo'] ?? 'No especificado') ?><br>
                                 Fecha: <?= date('d/m/Y H:i', strtotime($factura['fecha_rechazo'] ?? 'now')) ?>
                             </div>
+                        <?php endif; ?>
+
+                        <!-- Si el monto de la factura no coincide con el saldo pendiente real en
+                             SAP de la orden seleccionada, se muestra el detalle para que Compras
+                             decida con esa información. Si coincide, no se muestra nada y el
+                             flujo sigue normal (los botones de abajo). -->
+                        <?php if ($detalleSaldoPendienteAutorizacion !== null): ?>
+                        <div class="alerta-saldo">
+                            <h3 style="margin:0 0 10px;">⚠️ El monto de la factura no coincide con el saldo pendiente de la orden</h3>
+                            <p style="margin:0 0 10px;">
+                                Saldo pendiente real en SAP de las órdenes seleccionadas:
+                                <strong>Q <?= number_format($detalleSaldoPendienteAutorizacion['total_saldo_pendiente'], 2) ?></strong>
+                                &nbsp;|&nbsp; Monto de la factura: <strong>Q <?= number_format($factura['monto'], 2) ?></strong>
+                                &nbsp;|&nbsp; Diferencia:
+                                <strong style="color:<?= $detalleSaldoPendienteAutorizacion['diferencia'] > 0 ? '#dc3545' : '#b45309' ?>;">
+                                    Q <?= number_format(abs($detalleSaldoPendienteAutorizacion['diferencia']), 2) ?>
+                                    (<?= $detalleSaldoPendienteAutorizacion['diferencia'] > 0 ? 'factura mayor que el saldo' : 'saldo mayor que la factura' ?>)
+                                </strong>
+                            </p>
+                            <?php
+                                $lineaSeleccionadaPrevia = json_decode($factura['linea_seleccionada_compras'] ?? 'null', true);
+                                $valorPrevio = $lineaSeleccionadaPrevia ? ($lineaSeleccionadaPrevia['docentry'] . ':' . $lineaSeleccionadaPrevia['linenum']) : '';
+                            ?>
+                            <p style="margin:10px 0 0; font-size:0.9rem; color:#856404;">
+                                Marca la línea contra la que Compras considera que va esta factura (queda registrada para Contabilidad, no cambia cómo se envía a SAP):
+                            </p>
+                            <?php foreach ($detalleSaldoPendienteAutorizacion['detalle'] as $docentry => $orden): ?>
+                            <table class="data-table" style="margin-top:10px;">
+                                <thead>
+                                    <tr><th colspan="4">Orden <?= htmlspecialchars($orden['docnum']) ?> (DocEntry <?= (int)$docentry ?>) — líneas abiertas en SAP</th></tr>
+                                    <tr><th></th><th># Línea</th><th>Descripción</th><th>Saldo Pendiente</th></tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($orden['lineas'] as $linea): ?>
+                                    <?php $valorLinea = $docentry . ':' . $linea['linenum']; ?>
+                                    <tr>
+                                        <td>
+                                            <input type="radio" name="linea_seleccionada_compras" value="<?= htmlspecialchars($valorLinea) ?>"
+                                                   data-descripcion="<?= htmlspecialchars($linea['descripcion']) ?>"
+                                                   data-saldo="<?= $linea['saldo_pendiente'] ?>"
+                                                   data-docnum="<?= htmlspecialchars($orden['docnum']) ?>"
+                                                   <?= $valorPrevio === $valorLinea ? 'checked' : '' ?>>
+                                        </td>
+                                        <td><?= (int)$linea['linenum'] ?></td>
+                                        <td><?= htmlspecialchars($linea['descripcion']) ?></td>
+                                        <td>Q <?= number_format($linea['saldo_pendiente'], 2) ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                    <tr style="font-weight:bold; background:#f8f9fa;">
+                                        <td colspan="3">Total orden <?= htmlspecialchars($orden['docnum']) ?></td>
+                                        <td>Q <?= number_format($orden['total'], 2) ?></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <?php endforeach; ?>
+                        </div>
                         <?php endif; ?>
 
                         <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
@@ -1063,18 +1138,34 @@
 
         async function aprobarFactura() {
             const comentarios = document.getElementById('comentariosAprobar').value;
-            
+
+            // Línea de la orden que Compras marcó en el detalle de saldo pendiente (si el monto
+            // no coincidía y se mostró el desglose) — solo trazabilidad, no cambia el envío a SAP.
+            const radioLinea = document.querySelector('input[name="linea_seleccionada_compras"]:checked');
+            const lineaSeleccionada = radioLinea ? radioLinea.value : '';
+            const lineaDescripcion = radioLinea ? radioLinea.dataset.descripcion : '';
+            const lineaSaldo = radioLinea ? radioLinea.dataset.saldo : '';
+            const lineaDocnum = radioLinea ? radioLinea.dataset.docnum : '';
+
             if (!confirm('¿Confirmas que esta factura es correcta y pasa al área de Contabilidad?')) {
                 return;
             }
-            
+
             try {
+                const params = new URLSearchParams({
+                    factura_id: facturaActualId,
+                    comentarios: comentarios,
+                    linea_seleccionada: lineaSeleccionada,
+                    linea_descripcion: lineaDescripcion,
+                    linea_saldo: lineaSaldo,
+                    linea_docnum: lineaDocnum
+                });
                 const response = await fetch('index.php?controller=admin&action=aprobarFacturaCompras', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: `factura_id=${facturaActualId}&comentarios=${encodeURIComponent(comentarios)}`
+                    body: params.toString()
                 });
                 
                 const data = await response.json();

@@ -28,6 +28,52 @@
         </table>
     </div>
     
+    <!-- Alerta de saldo pendiente: el monto de la factura no coincide con el saldo pendiente
+         real en SAP de la(s) orden(es) que tiene seleccionadas. No bloquea nada — solo informa
+         para que Compras decida con criterio si aprueba o rechaza. -->
+    <?php if ($comparacionSaldoPendiente !== null): ?>
+    <div class="alerta-saldo">
+        <h2>⚠️ El monto de la factura no coincide con el saldo pendiente de la orden</h2>
+        <p>
+            Saldo pendiente real en SAP de las órdenes seleccionadas:
+            <strong>Q <?= number_format($comparacionSaldoPendiente['total_saldo_pendiente'], 2) ?></strong>
+            &nbsp;|&nbsp; Monto de la factura: <strong>Q <?= number_format($factura['monto'], 2) ?></strong>
+            &nbsp;|&nbsp; Diferencia:
+            <strong style="color:<?= $comparacionSaldoPendiente['diferencia'] > 0 ? '#dc3545' : '#b45309' ?>;">
+                Q <?= number_format(abs($comparacionSaldoPendiente['diferencia']), 2) ?>
+                (<?= $comparacionSaldoPendiente['diferencia'] > 0 ? 'factura mayor que el saldo' : 'saldo mayor que la factura' ?>)
+            </strong>
+        </p>
+        <?php foreach ($comparacionSaldoPendiente['detalle'] as $docentry => $orden): ?>
+        <table class="data-table" style="margin-top:12px;">
+            <thead>
+                <tr>
+                    <th colspan="3">Orden <?= htmlspecialchars($orden['docnum']) ?> (DocEntry <?= (int)$docentry ?>) — líneas abiertas en SAP</th>
+                </tr>
+                <tr>
+                    <th># Línea</th>
+                    <th>Descripción</th>
+                    <th>Saldo Pendiente</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($orden['lineas'] as $linea): ?>
+                <tr>
+                    <td><?= (int)$linea['linenum'] ?></td>
+                    <td><?= htmlspecialchars($linea['descripcion']) ?></td>
+                    <td>Q <?= number_format($linea['saldo_pendiente'], 2) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                <tr style="font-weight:bold; background:#f8f9fa;">
+                    <td colspan="2">Total orden <?= htmlspecialchars($orden['docnum']) ?></td>
+                    <td>Q <?= number_format($orden['total'], 2) ?></td>
+                </tr>
+            </tbody>
+        </table>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
     <!-- Facturas adicionales -->
     <?php if (!empty($facturasAdicionales)): ?>
     <div class="facturas-adicionales">
@@ -118,6 +164,10 @@
 .checkbox-label:hover { background: #f9f9f9; }
 .btn-success { background: #28a745; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; }
 .btn-danger { background: #dc3545; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; }
+.alerta-saldo { background: #fff8e6; border: 1px solid #ffe08a; border-left: 5px solid #b45309; border-radius: 8px; padding: 18px 20px; margin-bottom: 25px; }
+.alerta-saldo h2 { font-size: 1.1rem; color: #856404; margin-bottom: 10px; }
+.alerta-saldo .data-table { width: 100%; border-collapse: collapse; background: white; }
+.alerta-saldo .data-table th, .alerta-saldo .data-table td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 0.9rem; }
 </style>
 
 <script>

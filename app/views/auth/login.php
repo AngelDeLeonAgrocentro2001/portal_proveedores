@@ -144,15 +144,15 @@ if (isset($_SESSION['user'])) {
             </form>
 
             <!-- Links -->
-            <p class="mt-6 text-center text-xs text-white/40">
+            <!-- <p class="mt-6 text-center text-xs text-white/40">
                 ¿No tienes cuenta?
                 <a href="#" class="font-semibold text-bright/90 hover:text-bright transition-colors">Activar usuario</a>
-            </p>
+            </p> -->
 
-            <p class="mt-2 text-center text-xs text-white/40">
+            <!-- <p class="mt-2 text-center text-xs text-white/40">
                 ¿Eres personal interno (Contabilidad, Finanzas, Compras)?
                 <a href="index.php?controller=auth&action=loginStaff" class="font-semibold text-bright/90 hover:text-bright transition-colors">Inicia sesión aquí</a>
-            </p>
+            </p> -->
 
             <div class="mt-6 pt-5 border-t border-white/10 flex items-center justify-between text-[11px] text-white/30">
                 <a href="#" class="hover:text-white/60 transition-colors">Términos y condiciones</a>

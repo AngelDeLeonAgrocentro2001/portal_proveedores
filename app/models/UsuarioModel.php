@@ -128,8 +128,10 @@ public function login($cardcode, $email, $password) {
         }
     }
 
-    // Crear nuevo usuario (solo admin)
-    public function crearUsuario($cardcode, $email, $username, $password, $rol) {
+    // Crear nuevo usuario (solo admin). $creadoPor identifica al admin que lo creó (username),
+    // para que "Usuarios existentes para este CardCode" le muestre a cada admin solo los
+    // usuarios que él mismo creó, no todos los del cardcode.
+    public function crearUsuario($cardcode, $email, $username, $password, $rol, $creadoPor = null) {
         $rolesValidos = ['admin', 'consultas', 'crear_contrasenas'];
         if (!in_array($rol, $rolesValidos)) {
             return false;
@@ -138,12 +140,12 @@ public function login($cardcode, $email, $password) {
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
         $stmt = $this->pdo->prepare("
-            INSERT INTO usuarios (cardcode, email, username, password, rol)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO usuarios (cardcode, email, username, password, rol, creado_por)
+            VALUES (?, ?, ?, ?, ?, ?)
         ");
 
         try {
-            return $stmt->execute([$cardcode, $email, $username, $hashedPassword, $rol]);
+            return $stmt->execute([$cardcode, $email, $username, $hashedPassword, $rol, $creadoPor]);
         } catch (PDOException $e) {
             error_log("Error al crear usuario: " . $e->getMessage());
             return false;
@@ -169,12 +171,26 @@ public function login($cardcode, $email, $password) {
         // Obtener todos los usuarios de un cardcode (para admin)
     public function getUsuariosByCardcode($cardcode) {
         $stmt = $this->pdo->prepare("
-            SELECT id, username, email, rol, fecha_creacion 
-            FROM usuarios 
-            WHERE cardcode = ? 
+            SELECT id, username, email, rol, fecha_creacion
+            FROM usuarios
+            WHERE cardcode = ?
             ORDER BY fecha_creacion DESC
         ");
         $stmt->execute([$cardcode]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // Usuarios de un cardcode creados específicamente por $creadoPor (un admin) — usado en
+    // "Gestionar Usuarios" para que cada admin vea solo los usuarios que él mismo dio de alta,
+    // no los que ya existían o que dio de alta SuperAdmin u otro admin.
+    public function getUsuariosCreadosPor($cardcode, $creadoPor) {
+        $stmt = $this->pdo->prepare("
+            SELECT id, username, email, rol, fecha_creacion
+            FROM usuarios
+            WHERE cardcode = ? AND creado_por = ?
+            ORDER BY fecha_creacion DESC
+        ");
+        $stmt->execute([$cardcode, $creadoPor]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

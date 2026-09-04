@@ -154,6 +154,7 @@ class ProveedorController
                     'contrasena'   => $resultado['contrasena'],
                     'esLunes'      => $resultado['esLunes'],
                     'proximoLunes' => $resultado['proximoLunes'],
+                    'diasCredito'  => $resultado['diasCredito'] ?? 30,
                     'mensaje_adicional' => $resultado['mensaje_adicional'] ?? ''
                 ];
 
@@ -501,6 +502,7 @@ HTML;
                 $oc['saldo_pendiente'] = $saldosPendientes[(int)$oc['docentry']] ?? 0.0;
             }
             unset($oc);
+            $totalSaldoPendiente = array_sum(array_column($ordenes, 'saldo_pendiente'));
         }
 
         require_once BASE_PATH . 'app/views/layout/header.php';
@@ -524,6 +526,13 @@ HTML;
         $nit = trim($proveedor['nit'] ?? '');
         $facturasSAT = [];
         $errorSAT = '';
+        $totalFacturasSAT = 0;
+
+        // Paginación (25 por página) y buscador (número de factura, monto o fecha) — la lista
+        // completa se venía trayendo de una sola vez, sin límite, y con NIT como único filtro.
+        $porPagina = 15;
+        $pagina = max(1, (int)($_GET['pagina'] ?? 1));
+        $buscar = trim($_GET['buscar_sat'] ?? '');
 
         if (empty($nit)) {
             $errorSAT = "No se encontró NIT registrado para este proveedor.";
@@ -531,26 +540,56 @@ HTML;
             try {
                 $dbCajas = DatabaseCajas::getInstance()->getPdo();
 
-                $sql = "SELECT 
-                            serie, 
-                            numero_dte, 
-                            fecha_emision, 
-                            gran_total, 
-                            iva, 
+                $where = "WHERE nit_emisor = :nit";
+                $params = ['nit' => $nit];
+
+                if ($buscar !== '') {
+                    // Una sola búsqueda cubre número de factura (serie + número DTE), monto y
+                    // fecha (en formato dd/mm/aaaa, como se muestra en la tabla, o aaaa-mm-dd).
+                    $where .= " AND (
+                        CONCAT(COALESCE(serie, ''), ' ', COALESCE(numero_dte, '')) LIKE :buscar1
+                        OR CAST(gran_total AS CHAR) LIKE :buscar2
+                        OR DATE_FORMAT(fecha_emision, '%d/%m/%Y') LIKE :buscar3
+                        OR CAST(fecha_emision AS CHAR) LIKE :buscar4
+                    )";
+                    $like = '%' . $buscar . '%';
+                    $params['buscar1'] = $like;
+                    $params['buscar2'] = $like;
+                    $params['buscar3'] = $like;
+                    $params['buscar4'] = $like;
+                }
+
+                $stmtCount = $dbCajas->prepare("SELECT COUNT(*) FROM dte $where");
+                $stmtCount->execute($params);
+                $totalFacturasSAT = (int)$stmtCount->fetchColumn();
+
+                $totalPaginas = max(1, (int)ceil($totalFacturasSAT / $porPagina));
+                $pagina = min($pagina, $totalPaginas);
+                $offset = ($pagina - 1) * $porPagina;
+
+                $sql = "SELECT
+                            serie,
+                            numero_dte,
+                            fecha_emision,
+                            gran_total,
+                            iva,
                             nombre_emisor,
                             usado
-                        FROM dte 
-                        WHERE nit_emisor = :nit
-                        ORDER BY fecha_emision DESC";
+                        FROM dte
+                        $where
+                        ORDER BY fecha_emision DESC
+                        LIMIT $porPagina OFFSET $offset";
 
                 $stmt = $dbCajas->prepare($sql);
-                $stmt->execute(['nit' => $nit]);
+                $stmt->execute($params);
                 $facturasSAT = $stmt->fetchAll(PDO::FETCH_ASSOC);
             } catch (Exception $e) {
                 $errorSAT = "Error al consultar facturas del SAT: " . $e->getMessage();
                 error_log("❌ " . $errorSAT);
             }
         }
+
+        $totalPaginas = max(1, (int)ceil($totalFacturasSAT / $porPagina));
 
         require_once BASE_PATH . 'app/views/layout/header.php';
         require_once BASE_PATH . 'app/views/proveedor/facturas-sat.php';
@@ -580,7 +619,8 @@ HTML;
             if (empty($email) || empty($username) || empty($password)) {
                 $error = "Todos los campos son obligatorios";
             } else {
-                $resultado = $usuarioModel->crearUsuario($cardcode, $email, $username, $password, $rol);
+                $creadoPor = $_SESSION['user']['username'] ?? null;
+                $resultado = $usuarioModel->crearUsuario($cardcode, $email, $username, $password, $rol, $creadoPor);
 
                 if ($resultado) {
                     $success = "Usuario creado correctamente con rol: " . ucfirst(str_replace('_', ' ', $rol));
@@ -590,8 +630,9 @@ HTML;
             }
         }
 
-        // Obtener todos los usuarios del mismo cardcode
-        $usuarios = $usuarioModel->getUsuariosByCardcode($cardcode);
+        // Solo los usuarios que este admin creó desde aquí mismo — no todos los del cardcode
+        // (los que ya existían o que dio de alta SuperAdmin no deben aparecerle).
+        $usuarios = $usuarioModel->getUsuariosCreadosPor($cardcode, $_SESSION['user']['username'] ?? '');
 
         require_once BASE_PATH . 'app/views/layout/header.php';
         require_once BASE_PATH . 'app/views/proveedor/gestionar-usuarios.php';

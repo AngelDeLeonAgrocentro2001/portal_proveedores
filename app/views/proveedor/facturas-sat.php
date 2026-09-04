@@ -6,9 +6,24 @@
         <div class="alert error"><?= htmlspecialchars($errorSAT) ?></div>
     <?php endif; ?>
 
+    <form method="GET" style="margin-bottom:20px; display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="hidden" name="controller" value="proveedor">
+        <input type="hidden" name="action" value="facturasSAT">
+        <input type="text" name="buscar_sat" value="<?= htmlspecialchars($buscar ?? '') ?>"
+               placeholder="🔎 Buscar por número de factura, monto o fecha..."
+               style="flex:1; min-width:250px; padding:10px; border:1px solid #ccc; border-radius:6px;">
+        <button type="submit" class="btn-primary" style="width:auto;">Buscar</button>
+        <?php if (!empty($buscar)): ?>
+            <a href="index.php?controller=proveedor&action=facturasSAT" class="btn-secondary" style="width:auto;">Limpiar</a>
+        <?php endif; ?>
+    </form>
+
     <?php if (!empty($facturasSAT)): ?>
         <p style="margin-bottom: 15px; color:#006400;">
-            <strong><?= count($facturasSAT) ?></strong> facturas encontradas
+            <strong><?= number_format($totalFacturasSAT) ?></strong> factura(s) encontrada(s)
+            <?php if ($totalPaginas > 1): ?>
+                — página <?= $pagina ?> de <?= $totalPaginas ?>
+            <?php endif; ?>
         </p>
 
         <table class="data-table">
@@ -51,9 +66,44 @@
             </tbody>
         </table>
 
+        <?php if ($totalPaginas > 1): ?>
+        <div style="margin-top:20px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; align-items:center;">
+            <?php
+                $qsBase = 'controller=proveedor&action=facturasSAT' . ($buscar !== '' ? '&buscar_sat=' . urlencode($buscar) : '');
+                $rangoInicio = max(1, $pagina - 2);
+                $rangoFin = min($totalPaginas, $pagina + 2);
+            ?>
+            <?php if ($pagina > 1): ?>
+                <a href="index.php?<?= $qsBase ?>&pagina=<?= $pagina - 1 ?>" class="btn-small">‹ Anterior</a>
+            <?php endif; ?>
+
+            <?php if ($rangoInicio > 1): ?>
+                <a href="index.php?<?= $qsBase ?>&pagina=1" class="btn-small">1</a>
+                <?php if ($rangoInicio > 2): ?><span>…</span><?php endif; ?>
+            <?php endif; ?>
+
+            <?php for ($p = $rangoInicio; $p <= $rangoFin; $p++): ?>
+                <?php if ($p === $pagina): ?>
+                    <strong class="btn-small" style="background:#006400; color:#fff;"><?= $p ?></strong>
+                <?php else: ?>
+                    <a href="index.php?<?= $qsBase ?>&pagina=<?= $p ?>" class="btn-small"><?= $p ?></a>
+                <?php endif; ?>
+            <?php endfor; ?>
+
+            <?php if ($rangoFin < $totalPaginas): ?>
+                <?php if ($rangoFin < $totalPaginas - 1): ?><span>…</span><?php endif; ?>
+                <a href="index.php?<?= $qsBase ?>&pagina=<?= $totalPaginas ?>" class="btn-small"><?= $totalPaginas ?></a>
+            <?php endif; ?>
+
+            <?php if ($pagina < $totalPaginas): ?>
+                <a href="index.php?<?= $qsBase ?>&pagina=<?= $pagina + 1 ?>" class="btn-small">Siguiente ›</a>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
     <?php else: ?>
         <div class="alert info">
-            No se encontraron facturas con tu NIT como emisor.
+            <?= !empty($buscar) ? 'No se encontraron facturas que coincidan con la búsqueda.' : 'No se encontraron facturas con tu NIT como emisor.' ?>
         </div>
     <?php endif; ?>
 

@@ -26,9 +26,9 @@ class ComprasController {
     // Listar facturas pendientes de revisión por Compras
     public function revisionPendiente() {
         $estado = $_GET['estado'] ?? 'reportada';
-        
+
         $stmt = $this->pdo->prepare("
-            SELECT f.*, p.nombre as proveedor_nombre, p.cardcode
+            SELECT f.*, p.nombre as proveedor_nombre, p.cardcode, p.tipo_proveedor
             FROM facturas f
             JOIN proveedores p ON f.cardcode = p.cardcode
             WHERE f.estado IN ('reportada', 'revision_compras')
@@ -36,7 +36,35 @@ class ComprasController {
         ");
         $stmt->execute();
         $facturas = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
+
+        // Comparar el monto de cada factura contra el saldo pendiente real en SAP de sus órdenes
+        // vinculadas — una sola consulta para todas las facturas de la página, no una por fila.
+        // Cuando no coincide, se marca para que Compras la revise con más cuidado (el detalle
+        // completo se ve al entrar a "Revisar").
+        $proveedorModel = new ProveedorModel();
+        $docentriesPorFactura = [];
+        $todosLosDocentries = [];
+        foreach ($facturas as $f) {
+            $ordenes = json_decode($f['ordenes_relacionadas'] ?? '[]', true) ?: [];
+            $docentries = array_values(array_filter(array_map('intval', (array)$ordenes)));
+            $docentriesPorFactura[$f['id']] = $docentries;
+            $todosLosDocentries = array_merge($todosLosDocentries, $docentries);
+        }
+        $detalleSaldos = $proveedorModel->getDetalleSaldoPendienteSAP($todosLosDocentries);
+
+        foreach ($facturas as &$f) {
+            $f['coincide_saldo_pendiente'] = null; // null = no aplica (sin orden vinculada, o material_empaque)
+            if (($f['tipo_proveedor'] ?? '') === 'material_empaque' || empty($docentriesPorFactura[$f['id']])) {
+                continue;
+            }
+            $totalSaldoPendiente = 0.0;
+            foreach ($docentriesPorFactura[$f['id']] as $docentry) {
+                $totalSaldoPendiente += $detalleSaldos[$docentry]['total'] ?? 0.0;
+            }
+            $f['coincide_saldo_pendiente'] = abs((float)$f['monto'] - $totalSaldoPendiente) <= 0.01;
+        }
+        unset($f);
+
         require_once BASE_PATH . 'app/views/layout/header.php';
         require_once BASE_PATH . 'app/views/compras/revision-pendiente.php';
         require_once BASE_PATH . 'app/views/layout/footer.php';
@@ -61,11 +89,31 @@ class ComprasController {
         
         // Obtener órdenes de compra actuales
         $ordenesActuales = json_decode($factura['ordenes_relacionadas'] ?? '[]', true);
-        
+
         // Obtener órdenes de compra disponibles del proveedor (desde SAP)
         $proveedorModel = new ProveedorModel();
         $ordenesDisponibles = $proveedorModel->getOrdenesCompraByCardcode($factura['cardcode'], 'abierta');
-        
+
+        // Si el monto de la factura coincide con el saldo pendiente real en SAP de la(s) orden(es)
+        // seleccionadas, no hace falta mostrar nada especial (sigue el flujo normal de revisión).
+        // Si NO coincide, se le muestra a Compras el detalle línea por línea del saldo pendiente
+        // de esas órdenes, para que decida con esa información si aprueba o rechaza — el sistema
+        // no elige la línea por su cuenta.
+        $comparacionSaldoPendiente = null;
+        $docentriesActuales = array_values(array_filter(array_map('intval', (array)$ordenesActuales)));
+        if (!empty($docentriesActuales) && ($proveedorModel->getProveedorByCardcode($factura['cardcode'])['tipo_proveedor'] ?? '') !== 'material_empaque') {
+            $detalleSaldos = $proveedorModel->getDetalleSaldoPendienteSAP($docentriesActuales);
+            $totalSaldoPendiente = array_sum(array_column($detalleSaldos, 'total'));
+            $diferencia = round((float)$factura['monto'] - $totalSaldoPendiente, 2);
+            if (abs($diferencia) > 0.01) {
+                $comparacionSaldoPendiente = [
+                    'detalle' => $detalleSaldos,
+                    'total_saldo_pendiente' => $totalSaldoPendiente,
+                    'diferencia' => $diferencia
+                ];
+            }
+        }
+
         // Obtener facturas adicionales si existen
         $stmtAd = $this->pdo->prepare("SELECT * FROM facturas_adicionales WHERE factura_id = ?");
         $stmtAd->execute([$id]);

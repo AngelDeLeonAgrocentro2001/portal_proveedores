@@ -1158,12 +1158,13 @@ function mostrarModalContraseña() {
     document.getElementById('contrasenaDisplay').textContent = data.contrasena || 'AGRO-XXXXXX-XXXXXX';
 
     let mensaje = '';
+    const diasCredito = data.diasCredito || 30;
 
     if (data.esLunes === true) {
         mensaje = `
             <p style="color:#006400;">
                 ✅ La contraseña fue generada correctamente <strong>hoy lunes</strong>.<br><br>
-                Se iniciarán los 30 días de crédito a partir de hoy.
+                Se iniciarán los ${diasCredito} días de crédito a partir de hoy.
                 ${data.mensaje_adicional ? '<br><br>' + data.mensaje_adicional : ''}
             </p>
         `;
@@ -1175,7 +1176,7 @@ function mostrarModalContraseña() {
                 Hoy no es lunes.<br><br>
                 La contraseña se tomará en cuenta el <strong>próximo lunes</strong>:<br>
                 <strong style="font-size:1.35rem; color:#006400;">${proximoLunes}</strong><br><br>
-                A partir de ese lunes se contarán los 30 días de crédito para el pago.
+                A partir de ese lunes se contarán los ${diasCredito} días de crédito para el pago.
                 ${data.mensaje_adicional ? '<br><br>' + data.mensaje_adicional : ''}
             </p>
         `;

@@ -304,9 +304,10 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
             <span class="close" onclick="cerrarModal('modalCrearUsuario')">&times;</span>
             <h2>👤 Nuevo Usuario</h2>
             <form method="POST" action="index.php?controller=superadmin&action=crearUsuario">
-                <div class="form-group">
-                    <label>CardCode del Proveedor *</label>
-                    <input type="text" name="cardcode" required placeholder="Debe existir ya en Proveedores">
+                <div class="form-group" id="crear_user_cardcode_group">
+                    <label id="crear_user_cardcode_label">CardCode del Proveedor *</label>
+                    <input type="text" name="cardcode" id="crear_user_cardcode" required placeholder="Debe existir ya en Proveedores">
+                    <small id="crear_user_cardcode_hint" style="display:none; color:#666;">No aplica para Supervisor de Finanzas ni Contabilidad (personal interno) — puedes dejarlo en blanco.</small>
                 </div>
                 <div class="form-group">
                     <label>Correo *</label>
@@ -322,7 +323,7 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
                 </div>
                 <div class="form-group">
                     <label>Rol *</label>
-                    <select name="rol">
+                    <select name="rol" id="crear_user_rol" onchange="actualizarRequeridoCardcode('crear_user_rol', 'crear_user_cardcode', 'crear_user_cardcode_hint', 'crear_user_cardcode_label')">
                         <?php foreach ($rolesDisponibles as $val => $label): ?>
                             <option value="<?= htmlspecialchars($val) ?>"><?= htmlspecialchars($label) ?></option>
                         <?php endforeach; ?>
@@ -357,8 +358,9 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
             <form method="POST" action="index.php?controller=superadmin&action=actualizarUsuario">
                 <input type="hidden" name="id" id="edit_user_id">
                 <div class="form-group">
-                    <label>CardCode del Proveedor *</label>
+                    <label id="edit_user_cardcode_label">CardCode del Proveedor *</label>
                     <input type="text" name="cardcode" id="edit_user_cardcode" required>
+                    <small id="edit_user_cardcode_hint" style="display:none; color:#666;">No aplica para Supervisor de Finanzas ni Contabilidad (personal interno) — puedes dejarlo en blanco.</small>
                 </div>
                 <div class="form-group">
                     <label>Correo *</label>
@@ -374,7 +376,7 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
                 </div>
                 <div class="form-group">
                     <label>Rol *</label>
-                    <select name="rol" id="edit_user_rol">
+                    <select name="rol" id="edit_user_rol" onchange="actualizarRequeridoCardcode('edit_user_rol', 'edit_user_cardcode', 'edit_user_cardcode_hint', 'edit_user_cardcode_label')">
                         <?php foreach ($rolesDisponibles as $val => $label): ?>
                             <option value="<?= htmlspecialchars($val) ?>"><?= htmlspecialchars($label) ?></option>
                         <?php endforeach; ?>
@@ -475,7 +477,22 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
             document.getElementById('edit_user_rol').value = u.rol;
             document.getElementById('edit_user_tipo_supervisor').value = u.tipo_supervisor || '';
             document.getElementById('edit_user_area').value = u.area || '';
+            actualizarRequeridoCardcode('edit_user_rol', 'edit_user_cardcode', 'edit_user_cardcode_hint', 'edit_user_cardcode_label');
             abrirModal('modalEditarUsuario');
+        }
+
+        // Supervisor de Finanzas y Contabilidad son personal interno de Agrocentro, no ligado a
+        // ningún proveedor — no tiene sentido exigirles un CardCode al crearlos o editarlos.
+        function actualizarRequeridoCardcode(rolSelectId, cardcodeInputId, hintId, labelId) {
+            const rol = document.getElementById(rolSelectId).value;
+            const input = document.getElementById(cardcodeInputId);
+            const hint = document.getElementById(hintId);
+            const label = document.getElementById(labelId);
+            const noAplica = rol === 'supervisor_finanzas' || rol === 'contabilidad';
+
+            input.required = !noAplica;
+            hint.style.display = noAplica ? 'block' : 'none';
+            label.textContent = noAplica ? 'CardCode del Proveedor' : 'CardCode del Proveedor *';
         }
 
     </script>
