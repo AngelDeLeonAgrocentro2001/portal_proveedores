@@ -123,7 +123,7 @@ if (isset($_SESSION['user'])) {
                         <label class="block text-xs font-semibold text-white/50 uppercase tracking-wider">
                             Contraseña
                         </label>
-                        <a href="#" class="text-[11px] font-medium text-bright/80 hover:text-bright transition-colors">
+                        <a href="index.php?controller=auth&action=resetPassword" class="text-[11px] font-medium text-bright/80 hover:text-bright transition-colors">
                             ¿Olvidé mi contraseña?
                         </a>
                     </div>

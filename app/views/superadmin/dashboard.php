@@ -307,7 +307,7 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
                 <div class="form-group" id="crear_user_cardcode_group">
                     <label id="crear_user_cardcode_label">CardCode del Proveedor *</label>
                     <input type="text" name="cardcode" id="crear_user_cardcode" required placeholder="Debe existir ya en Proveedores">
-                    <small id="crear_user_cardcode_hint" style="display:none; color:#666;">No aplica para Supervisor de Finanzas ni Contabilidad (personal interno) — puedes dejarlo en blanco.</small>
+                    <small id="crear_user_cardcode_hint" style="display:none; color:#666;">No aplica para Supervisor de Compras, Supervisor de Finanzas ni Contabilidad (personal interno) — puedes dejarlo en blanco.</small>
                 </div>
                 <div class="form-group">
                     <label>Correo *</label>
@@ -360,7 +360,7 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
                 <div class="form-group">
                     <label id="edit_user_cardcode_label">CardCode del Proveedor *</label>
                     <input type="text" name="cardcode" id="edit_user_cardcode" required>
-                    <small id="edit_user_cardcode_hint" style="display:none; color:#666;">No aplica para Supervisor de Finanzas ni Contabilidad (personal interno) — puedes dejarlo en blanco.</small>
+                    <small id="edit_user_cardcode_hint" style="display:none; color:#666;">No aplica para Supervisor de Compras, Supervisor de Finanzas ni Contabilidad (personal interno) — puedes dejarlo en blanco.</small>
                 </div>
                 <div class="form-group">
                     <label>Correo *</label>
@@ -488,7 +488,7 @@ $tiposProveedorDisponibles = ['normal', 'estratégico', 'ocasional', 'servicios'
             const input = document.getElementById(cardcodeInputId);
             const hint = document.getElementById(hintId);
             const label = document.getElementById(labelId);
-            const noAplica = rol === 'supervisor_finanzas' || rol === 'contabilidad';
+            const noAplica = rol === 'supervisor_compras' || rol === 'supervisor_finanzas' || rol === 'contabilidad';
 
             input.required = !noAplica;
             hint.style.display = noAplica ? 'block' : 'none';

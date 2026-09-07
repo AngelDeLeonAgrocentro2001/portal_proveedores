@@ -107,6 +107,14 @@ public function login($cardcode, $email, $password) {
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
+    // Actualiza la contraseña de un usuario identificado por su correo — usado por
+    // "Olvidé mi contraseña" (AuthController::changePassword), mismo flujo que agrocaja-chica.
+    public function actualizarPasswordPorEmail($email, $passwordPlano) {
+        $hashedPassword = password_hash($passwordPlano, PASSWORD_DEFAULT);
+        $stmt = $this->pdo->prepare("UPDATE usuarios SET password = ? WHERE email = ?");
+        return $stmt->execute([$hashedPassword, $email]);
+    }
+
     public function crearSupervisor($cardcode, $email, $username, $password, $tipo_supervisor, $area = 'compras') {
         $tiposValidos = ['transporte', 'material_empaque', 'finanzas', 'contabilidad'];
         if (!in_array($tipo_supervisor, $tiposValidos)) {

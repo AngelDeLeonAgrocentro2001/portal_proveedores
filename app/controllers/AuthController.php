@@ -164,6 +164,97 @@ class AuthController {
         exit;
     }
 
+    // "Olvidé mi contraseña" — mismo flujo de dos pasos que ya usa agrocaja-chica: primero se
+    // verifica que el correo exista (GET muestra el formulario, POST solo valida y responde
+    // JSON), y luego, ya en el formulario, se pide la nueva contraseña vía changePassword().
+    public function resetPassword() {
+        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            require_once BASE_PATH . 'app/views/auth/reset-password.php';
+            return;
+        }
+
+        $email = trim($_POST['email'] ?? '');
+        header('Content-Type: application/json');
+
+        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(['success' => false, 'error' => 'Email inválido']);
+            exit;
+        }
+
+        $model = new UsuarioModel();
+        $user = $model->getUserByEmail($email);
+
+        if ($user) {
+            echo json_encode(['success' => true, 'message' => 'Email verificado correctamente', 'email' => $email]);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'El email no está registrado en el sistema. Por favor, verifica tu dirección de correo.']);
+        }
+        exit;
+    }
+
+    // Segundo paso de "Olvidé mi contraseña": ya con el correo verificado, guarda la nueva
+    // contraseña y envía un correo de confirmación (mismo patrón que agrocaja-chica).
+    public function changePassword() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: index.php?controller=auth&action=resetPassword');
+            exit;
+        }
+
+        $email = trim($_POST['email'] ?? '');
+        $newPassword = $_POST['new_password'] ?? '';
+
+        header('Content-Type: application/json');
+
+        if (empty($email) || empty($newPassword)) {
+            echo json_encode(['success' => false, 'error' => 'Email y contraseña son obligatorios']);
+            exit;
+        }
+
+        if (strlen($newPassword) < 6) {
+            echo json_encode(['success' => false, 'error' => 'La contraseña debe tener al menos 6 caracteres']);
+            exit;
+        }
+
+        $model = new UsuarioModel();
+        $user = $model->getUserByEmail($email);
+
+        if (!$user) {
+            echo json_encode(['success' => false, 'error' => 'Usuario no encontrado']);
+            exit;
+        }
+
+        if (!$model->actualizarPasswordPorEmail($email, $newPassword)) {
+            echo json_encode(['success' => false, 'error' => 'Error al actualizar la contraseña en la base de datos']);
+            exit;
+        }
+
+        require_once BASE_PATH . 'app/models/MailerService.php';
+        $nombre = $user['username'] ?? $user['nombre'] ?? 'usuario';
+        $cuerpoHtml = "
+            <div style='font-family: Arial, sans-serif; max-width:600px; margin:0 auto; color:#333;'>
+                <h2 style='color:#1d6f3c;'>Contraseña Actualizada — Portal Proveedores Agrocentro</h2>
+                <p>Hola <strong>" . htmlspecialchars($nombre) . "</strong>,</p>
+                <p>Tu contraseña en el Portal de Proveedores ha sido actualizada exitosamente.</p>
+                <p><strong>✅ Cambio realizado con éxito</strong></p>
+                <p>Si no realizaste este cambio, por favor contacta inmediatamente al administrador del sistema.</p>
+                <div style='margin-top:20px; padding-top:20px; border-top:1px solid #ddd; font-size:12px; color:#666;'>
+                    <p>Este es un mensaje automático, por favor no respondas.</p>
+                    <p>Agrocentro &copy; " . date('Y') . "</p>
+                </div>
+            </div>
+        ";
+        $cuerpoTexto = "Hola $nombre,\n\nTu contraseña en el Portal de Proveedores ha sido actualizada exitosamente.\n\nSi no realizaste este cambio, contacta inmediatamente al administrador.\n\nAgrocentro";
+        $emailEnviado = MailerService::enviarConAdjunto($email, $nombre, 'Contraseña Actualizada - Portal Proveedores', $cuerpoHtml, $cuerpoTexto);
+
+        echo json_encode([
+            'success' => true,
+            'message' => $emailEnviado
+                ? 'Contraseña actualizada exitosamente. Se ha enviado un correo de confirmación.'
+                : 'Contraseña actualizada exitosamente.'
+        ]);
+        exit;
+    }
+
     public function logout() {
         // El personal interno (login por correo/contraseña) vuelve a su propio login al salir;
         // los proveedores (login con CardCode) siguen yendo al login normal, sin cambios para ellos.

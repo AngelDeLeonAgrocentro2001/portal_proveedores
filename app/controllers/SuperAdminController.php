@@ -173,13 +173,13 @@ class SuperAdminController {
         $tipoSupervisor = trim($_POST['tipo_supervisor'] ?? '') ?: null;
         $area = trim($_POST['area'] ?? '') ?: null;
 
-        // Los autorizadores de Finanzas y Contabilidad son personal interno de Agrocentro, no
-        // están ligados a ningún proveedor específico — no tiene sentido pedirles un CardCode.
-        // La columna usuarios.cardcode tiene FOREIGN KEY hacia proveedores.cardcode (no admite
-        // vacío ni un valor que no exista), así que en vez de dejarlo en blanco se usa el
-        // proveedor centinela 'INTERNO' (creado para este fin, estado inactivo para que no
+        // Los autorizadores de Compras, Finanzas y Contabilidad son personal interno de
+        // Agrocentro, no están ligados a ningún proveedor específico — no tiene sentido pedirles
+        // un CardCode. La columna usuarios.cardcode tiene FOREIGN KEY hacia proveedores.cardcode
+        // (no admite vacío ni un valor que no exista), así que en vez de dejarlo en blanco se usa
+        // el proveedor centinela 'INTERNO' (creado para este fin, estado inactivo para que no
         // aparezca en listados de proveedores reales).
-        $rolesSinCardcode = ['supervisor_finanzas', 'contabilidad'];
+        $rolesSinCardcode = ['supervisor_compras', 'supervisor_finanzas', 'contabilidad'];
         $requiereCardcode = !in_array($rol, $rolesSinCardcode, true);
 
         if (($requiereCardcode && $cardcode === '') || $email === '' || $username === '' || $password === '') {
@@ -229,7 +229,7 @@ class SuperAdminController {
             $this->redirectDashboard();
         }
 
-        $rolesSinCardcode = ['supervisor_finanzas', 'contabilidad'];
+        $rolesSinCardcode = ['supervisor_compras', 'supervisor_finanzas', 'contabilidad'];
         $cardcodePost = trim($_POST['cardcode'] ?? '');
         if (in_array($rol, $rolesSinCardcode, true) && $cardcodePost === '') {
             $cardcodePost = 'INTERNO';
