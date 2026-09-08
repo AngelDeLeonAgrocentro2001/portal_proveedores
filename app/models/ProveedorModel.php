@@ -270,6 +270,59 @@ class ProveedorModel {
         }
     }
 
+    // Igual que getDetalleSaldoPendienteSAP() pero para Entrada de Mercancía (OPDN/PDN1) —
+    // proveedores tipo material_empaque. Mismo cálculo (OpenSum*(1+VatPrcnt/100) de líneas
+    // abiertas), misma forma de retorno, solo cambia el documento base de SAP.
+    public function getDetalleSaldoPendienteEntradaMercanciaSAP(array $docentries) {
+        $docentries = array_values(array_unique(array_filter(array_map('intval', $docentries))));
+        if (empty($docentries)) {
+            return [];
+        }
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
+
+            $placeholders = implode(',', array_fill(0, count($docentries), '?'));
+            $query = "
+                SELECT T1.\"DocEntry\" AS \"docentry\", T0.\"DocNum\" AS \"docnum\", T1.\"LineNum\" AS \"linenum\",
+                       T1.\"Dscription\" AS \"descripcion\",
+                       (T1.\"OpenSum\" * (1 + (T1.\"VatPrcnt\" / 100))) AS \"saldopendiente\"
+                FROM \"" . SAP_SCHEMA . "\".OPDN T0
+                INNER JOIN \"" . SAP_SCHEMA . "\".PDN1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+                WHERE T1.\"DocEntry\" IN ($placeholders) AND T1.\"LineStatus\" = 'O'
+                ORDER BY T1.\"DocEntry\", T1.\"LineNum\"
+            ";
+
+            $stmt = odbc_prepare($conexion, $query);
+            if (!$stmt || !odbc_execute($stmt, $docentries)) {
+                throw new Exception("Error ejecutando consulta: " . odbc_errormsg($conexion));
+            }
+
+            $detalle = [];
+            while ($row = odbc_fetch_object($stmt)) {
+                $docentry = (int)$row->docentry;
+                if (!isset($detalle[$docentry])) {
+                    $detalle[$docentry] = ['docnum' => $row->docnum ?? '', 'lineas' => [], 'total' => 0.0];
+                }
+                $saldoLinea = (float)$row->saldopendiente;
+                $detalle[$docentry]['lineas'][] = [
+                    'linenum' => (int)$row->linenum,
+                    'descripcion' => mb_convert_encoding(trim($row->descripcion ?? ''), 'UTF-8', 'auto'),
+                    'saldo_pendiente' => $saldoLinea
+                ];
+                $detalle[$docentry]['total'] += $saldoLinea;
+            }
+
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            return $detalle;
+        } catch (Exception $e) {
+            error_log("Error al consultar detalle de saldo pendiente de Entrada de Mercancía SAP: " . $e->getMessage());
+            return [];
+        }
+    }
+
     // Entradas de Mercancía (SAP Goods Receipt PO, OPDN/PDN1) de un proveedor, con su detalle
     // de líneas. Usado en lugar de getOrdenesCompraByCardcode() para proveedores tipo
     // 'material_empaque' en la página "Mis Órdenes de Compra" — a diferencia de las órdenes de

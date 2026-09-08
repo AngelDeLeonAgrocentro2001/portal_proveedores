@@ -669,10 +669,11 @@
                              decida con esa información. Si coincide, no se muestra nada y el
                              flujo sigue normal (los botones de abajo). -->
                         <?php if ($detalleSaldoPendienteAutorizacion !== null): ?>
+                        <?php $tipoDocSaldo = $detalleSaldoPendienteAutorizacion['es_material_empaque'] ? 'la Entrada de Mercancía' : 'la orden'; ?>
                         <div class="alerta-saldo">
-                            <h3 style="margin:0 0 10px;">⚠️ El monto de la factura no coincide con el saldo pendiente de la orden</h3>
+                            <h3 style="margin:0 0 10px;">⚠️ El monto de la factura no coincide con el saldo pendiente de <?= $tipoDocSaldo ?></h3>
                             <p style="margin:0 0 10px;">
-                                Saldo pendiente real en SAP de las órdenes seleccionadas:
+                                Saldo pendiente real en SAP de <?= $detalleSaldoPendienteAutorizacion['es_material_empaque'] ? 'las entradas' : 'las órdenes' ?> seleccionadas:
                                 <strong>Q <?= number_format($detalleSaldoPendienteAutorizacion['total_saldo_pendiente'], 2) ?></strong>
                                 &nbsp;|&nbsp; Monto de la factura: <strong>Q <?= number_format($factura['monto'], 2) ?></strong>
                                 &nbsp;|&nbsp; Diferencia:
@@ -691,7 +692,7 @@
                             <?php foreach ($detalleSaldoPendienteAutorizacion['detalle'] as $docentry => $orden): ?>
                             <table class="data-table" style="margin-top:10px;">
                                 <thead>
-                                    <tr><th colspan="4">Orden <?= htmlspecialchars($orden['docnum']) ?> (DocEntry <?= (int)$docentry ?>) — líneas abiertas en SAP</th></tr>
+                                    <tr><th colspan="4"><?= $detalleSaldoPendienteAutorizacion['es_material_empaque'] ? 'Entrada' : 'Orden' ?> <?= htmlspecialchars($orden['docnum']) ?> (DocEntry <?= (int)$docentry ?>) — líneas abiertas en SAP</th></tr>
                                     <tr><th></th><th># Línea</th><th>Descripción</th><th>Saldo Pendiente</th></tr>
                                 </thead>
                                 <tbody>
@@ -711,7 +712,7 @@
                                     </tr>
                                     <?php endforeach; ?>
                                     <tr style="font-weight:bold; background:#f8f9fa;">
-                                        <td colspan="3">Total orden <?= htmlspecialchars($orden['docnum']) ?></td>
+                                        <td colspan="3">Total <?= $detalleSaldoPendienteAutorizacion['es_material_empaque'] ? 'entrada' : 'orden' ?> <?= htmlspecialchars($orden['docnum']) ?></td>
                                         <td>Q <?= number_format($orden['total'], 2) ?></td>
                                     </tr>
                                 </tbody>

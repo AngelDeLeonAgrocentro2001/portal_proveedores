@@ -280,24 +280,26 @@ class AdminController {
             $comparacionOrden = $this->armarComparacionOrden($factura['monto'] ?? 0, $montoOrdenes, $esMaterialEmpaque);
 
             // Para el momento de AUTORIZAR (Acciones de Compras): si el monto de la factura
-            // coincide con el saldo pendiente real en SAP de la(s) orden(es) seleccionadas, no se
-            // muestra nada y Compras sigue el flujo normal (botones de aprobar/rechazar de
-            // siempre). Si NO coincide, se le muestra el detalle línea por línea del saldo
-            // pendiente de esas órdenes, para que decida con esa información. No aplica a
-            // material_empaque (Entrada de Mercancía, otra numeración de DocEntry en SAP).
-            if (!$esMaterialEmpaque) {
-                $docentries = array_values(array_filter(array_map('intval', (array)json_decode($factura['ordenes_relacionadas'] ?? '[]', true))));
-                if (!empty($docentries)) {
-                    $detalleSaldos = $proveedorModel->getDetalleSaldoPendienteSAP($docentries);
-                    $totalSaldoPendiente = array_sum(array_column($detalleSaldos, 'total'));
-                    $diferenciaSaldo = round((float)($factura['monto'] ?? 0) - $totalSaldoPendiente, 2);
-                    if (abs($diferenciaSaldo) > 0.01) {
-                        $detalleSaldoPendienteAutorizacion = [
-                            'detalle' => $detalleSaldos,
-                            'total_saldo_pendiente' => $totalSaldoPendiente,
-                            'diferencia' => $diferenciaSaldo
-                        ];
-                    }
+            // coincide con el saldo pendiente real en SAP de la(s) orden(es)/entrada(s)
+            // seleccionadas, no se muestra nada y Compras sigue el flujo normal (botones de
+            // aprobar/rechazar de siempre). Si NO coincide, se le muestra el detalle línea por
+            // línea del saldo pendiente, para que decida con esa información. Aplica a todos los
+            // tipos de proveedor — material_empaque usa Entrada de Mercancía (OPDN/PDN1) en vez
+            // de Orden de Compra (OPOR/POR1), pero el mismo cálculo de saldo pendiente aplica.
+            $docentries = array_values(array_filter(array_map('intval', (array)json_decode($factura['ordenes_relacionadas'] ?? '[]', true))));
+            if (!empty($docentries)) {
+                $detalleSaldos = $esMaterialEmpaque
+                    ? $proveedorModel->getDetalleSaldoPendienteEntradaMercanciaSAP($docentries)
+                    : $proveedorModel->getDetalleSaldoPendienteSAP($docentries);
+                $totalSaldoPendiente = array_sum(array_column($detalleSaldos, 'total'));
+                $diferenciaSaldo = round((float)($factura['monto'] ?? 0) - $totalSaldoPendiente, 2);
+                if (abs($diferenciaSaldo) > 0.01) {
+                    $detalleSaldoPendienteAutorizacion = [
+                        'detalle' => $detalleSaldos,
+                        'total_saldo_pendiente' => $totalSaldoPendiente,
+                        'diferencia' => $diferenciaSaldo,
+                        'es_material_empaque' => $esMaterialEmpaque
+                    ];
                 }
             }
         }
