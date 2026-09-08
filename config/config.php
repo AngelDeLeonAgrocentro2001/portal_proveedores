@@ -43,3 +43,12 @@ define('MAIL_FROM_NAME', 'Agrocentro - Portal Proveedores');
 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
+
+// Símbolo/etiqueta a mostrar junto a un monto según la moneda real de la factura
+// (facturas.moneda, tomada del DTE al reportarla — GTQ o USD). GTQ se muestra como "Q" (como
+// siempre se ha mostrado en todo el portal); cualquier otra moneda se muestra con su propio
+// código (USD, etc.) para no confundirla con Quetzales.
+function simboloMoneda($moneda) {
+    $moneda = strtoupper(trim((string)($moneda ?? ''))) ?: 'GTQ';
+    return $moneda === 'GTQ' ? 'Q' : $moneda;
+}

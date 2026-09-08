@@ -89,7 +89,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
         </tr>
         <tr>
             <td><strong>Monto:</strong></td>
-            <td>Q <?= number_format($factura['monto'] ?? 0, 2) ?></td>
+            <td><?= simboloMoneda($factura['moneda'] ?? null) ?> <?= number_format($factura['monto'] ?? 0, 2) ?></td>
         </tr>
         <?php if (!empty($comparacionOrden)): ?>
         <tr>
@@ -331,7 +331,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                         <?php endif; ?>
                     </td>
                     <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
-                    <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
+                    <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['monto'] ?? 0, 2) ?></td>
                     <td>
                         <?php if (!empty($f['comparacion_orden'])): $co = $f['comparacion_orden']; ?>
                             <span class="badge-comparacion <?= $co['clase'] ?>"
@@ -381,7 +381,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                     <td><?= safeDateFormat($f['fecha_envio_sap'] ?? null) ?></td>
                     <td><?= htmlspecialchars(substr($f['proveedor_nombre'] ?? '', 0, 30)) ?></td>
                     <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
-                    <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
+                    <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['monto'] ?? 0, 2) ?></td>
                     <td><?= safeDateFormat($f['fecha_pago_propuesta'] ?? null) ?></td>
                     <td><?= htmlspecialchars($f['comprobante_sap'] ?? '—') ?></td>
                     <td>
@@ -424,7 +424,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                     <td><?= safeDateFormat($f['fecha_aprobacion_finanzas'] ?? null) ?></td>
                     <td><?= htmlspecialchars(substr($f['proveedor_nombre'] ?? '', 0, 30)) ?></td>
                     <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
-                    <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
+                    <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['monto'] ?? 0, 2) ?></td>
                     <td><strong><?= safeDateFormat($f['fecha_pago_propuesta'] ?? $f['fecha_pago_esperada'] ?? null) ?></strong></td>
                     <td>
                         <?php
@@ -524,7 +524,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                     <td><?= safeDateFormat($f['fecha_pago_real'] ?? null) ?></td>
                     <td><?= htmlspecialchars(substr($f['proveedor_nombre'] ?? '', 0, 30)) ?></td>
                     <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
-                    <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
+                    <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['monto'] ?? 0, 2) ?></td>
                     <td><?= htmlspecialchars($f['numero_comprobante_pago'] ?? '—') ?></td>
                     <td>
                         <a href="?controller=contabilidad&action=dashboard&buscar=<?= urlencode($f['numero_factura'] ?? '') ?>" 

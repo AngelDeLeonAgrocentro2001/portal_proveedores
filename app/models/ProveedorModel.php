@@ -154,18 +154,19 @@ class ProveedorModel {
 
         public function getUltimasFacturas($cardcode, $limit = 5) {
         $stmt = $this->pdo->prepare("
-            SELECT 
-                id, 
-                numero_factura, 
-                fecha_factura_sat, 
-                fecha_emision, 
-                monto, 
-                estado, 
-                contrasena_pago, 
-                fecha_pago_esperada 
-            FROM facturas 
-            WHERE cardcode = ? 
-            ORDER BY fecha_emision DESC 
+            SELECT
+                id,
+                numero_factura,
+                fecha_factura_sat,
+                fecha_emision,
+                monto,
+                moneda,
+                estado,
+                contrasena_pago,
+                fecha_pago_esperada
+            FROM facturas
+            WHERE cardcode = ?
+            ORDER BY fecha_emision DESC
             LIMIT " . (int)$limit
         );
         $stmt->execute([$cardcode]);

@@ -125,7 +125,7 @@ $mostrarResumen = in_array($rol, ['admin', 'consultas']);
                                     : '<span style="color:#999;">—</span>' ?>
                             </td>
                             <td><?= date('d/m/Y', strtotime($f['fecha_emision'])) ?></td>
-                            <td>Q <?= number_format($f['monto'], 2) ?></td>
+                            <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['monto'], 2) ?></td>
                             <td><span class="status <?= $f['estado'] ?>"><?= ucfirst($f['estado']) ?></span></td>
                             <td>
                                 <?php if (!empty($f['contrasena_pago']) && $f['estado'] !== 'pagada'): ?>

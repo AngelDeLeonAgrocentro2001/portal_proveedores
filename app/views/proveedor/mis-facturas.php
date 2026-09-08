@@ -42,7 +42,7 @@
                         <td><strong><?= htmlspecialchars($f['numero_factura']) ?></strong></td>
                         <td><?= !empty($f['fecha_factura_sat']) ? date('d/m/Y', strtotime($f['fecha_factura_sat'])) : '—' ?></td>
                         <td><?= date('d/m/Y', strtotime($f['fecha_emision'])) ?></td>
-                        <td>Q <?= number_format($f['monto'], 2) ?></td>
+                        <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['monto'], 2) ?></td>
                         <td>Q <?= number_format($f['monto_retencion'] ?? 0, 2) ?></td>
                         <td><span class="status <?= $f['estado'] ?>"><?= ucfirst($f['estado']) ?></span></td>
 

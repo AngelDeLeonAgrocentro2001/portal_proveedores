@@ -388,14 +388,15 @@ private function subirArchivo($file, $destinoDir) {
                     // Obtener todas las facturas del proveedor (con filtro opcional)
         public function getFacturasByProveedor($cardcode, $estado = '') {
             $sql = "
-                SELECT 
-                    id, 
-                    numero_factura, 
-                    fecha_factura_sat, 
-                    fecha_emision, 
-                    monto, 
-                    monto_retencion, 
-                    estado, 
+                SELECT
+                    id,
+                    numero_factura,
+                    fecha_factura_sat,
+                    fecha_emision,
+                    monto,
+                    moneda,
+                    monto_retencion,
+                    estado,
                     contrasena_pago, 
                     fecha_pago_esperada, 
                     fecha_inicio_credito,     -- ← AÑADIDO

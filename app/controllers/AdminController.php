@@ -223,7 +223,7 @@ class AdminController {
 
         // Listar últimas facturas reportadas (FILTRADAS POR TIPO)
         $sql = "
-            SELECT f.id, f.numero_factura, f.fecha_emision, f.monto, f.estado,
+            SELECT f.id, f.numero_factura, f.fecha_emision, f.monto, f.moneda, f.estado,
                    f.contrasena_pago, f.fecha_inicio_credito, f.contrasena_cancelada,
                    f.ordenes_relacionadas,
                    p.nombre as proveedor_nombre, p.cardcode, p.tipo_proveedor

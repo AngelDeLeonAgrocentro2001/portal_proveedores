@@ -521,7 +521,7 @@
                     </tr>
                     <tr>
                         <td><strong>Monto:</strong></td>
-                        <td>Q <?= number_format($factura['monto'], 2) ?></td>
+                        <td><?= simboloMoneda($factura['moneda'] ?? null) ?> <?= number_format($factura['monto'], 2) ?></td>
                     </tr>
                     <tr>
                         <td><strong>Estado:</strong></td>
@@ -675,7 +675,7 @@
                             <p style="margin:0 0 10px;">
                                 Saldo pendiente real en SAP de <?= $detalleSaldoPendienteAutorizacion['es_material_empaque'] ? 'las entradas' : 'las órdenes' ?> seleccionadas:
                                 <strong>Q <?= number_format($detalleSaldoPendienteAutorizacion['total_saldo_pendiente'], 2) ?></strong>
-                                &nbsp;|&nbsp; Monto de la factura: <strong>Q <?= number_format($factura['monto'], 2) ?></strong>
+                                &nbsp;|&nbsp; Monto de la factura: <strong><?= simboloMoneda($factura['moneda'] ?? null) ?> <?= number_format($factura['monto'], 2) ?></strong>
                                 &nbsp;|&nbsp; Diferencia:
                                 <strong style="color:<?= $detalleSaldoPendienteAutorizacion['diferencia'] > 0 ? '#dc3545' : '#b45309' ?>;">
                                     Q <?= number_format(abs($detalleSaldoPendienteAutorizacion['diferencia']), 2) ?>
@@ -792,7 +792,7 @@
                                 <td><?= date('d/m/Y', strtotime($f['fecha_emision'])) ?></td>
                                 <td><?= htmlspecialchars(substr($f['proveedor_nombre'], 0, 30)) ?></td>
                                 <td><strong><?= htmlspecialchars($f['numero_factura']) ?></strong></td>
-                                <td>Q <?= number_format($f['monto'], 2) ?></td>
+                                <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['monto'], 2) ?></td>
                                 <td>
                                     <?php if (!empty($f['comparacion_orden'])): $co = $f['comparacion_orden']; ?>
                                         <span class="badge-comparacion <?= $co['clase'] ?>"

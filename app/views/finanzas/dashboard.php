@@ -93,7 +93,7 @@ function safeDateFormat($date, $format = 'd/m/Y')
             </tr>
             <tr>
                 <td><strong>Monto:</strong></td>
-                <td>Q <?= number_format($factura['monto'] ?? 0, 2) ?></td>
+                <td><?= simboloMoneda($factura['moneda'] ?? null) ?> <?= number_format($factura['monto'] ?? 0, 2) ?></td>
             </tr>
             <?php if (!empty($comparacionOrden)): ?>
             <tr>
@@ -243,7 +243,7 @@ function safeDateFormat($date, $format = 'd/m/Y')
                             <?php endif; ?>
                         </td>
                         <td><strong><?= htmlspecialchars($f['numero_factura'] ?? 'N/A') ?></strong></td>
-                        <td>Q <?= number_format($f['monto'] ?? 0, 2) ?></td>
+                        <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['monto'] ?? 0, 2) ?></td>
                         <td>
                             <?php if (!empty($f['comparacion_orden'])): $co = $f['comparacion_orden']; ?>
                                 <span class="badge-comparacion <?= $co['clase'] ?>"
