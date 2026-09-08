@@ -95,9 +95,11 @@ class ProveedorController
             exit;
         }
 
-        // Moneda real del proveedor en SAP (OCRD.Currency) — para que el campo de monto muestre
-        // el símbolo correcto (Q o $) según en qué moneda factura realmente el proveedor.
-        $monedaProveedor = $proveedorModel->getMonedaSAP($cardcode);
+        // La moneda real de la factura la trae cada DTE de cajas_chicas (columna dte.moneda,
+        // GTQ o USD) — se muestra/actualiza dinámicamente en el formulario según qué factura
+        // SAT elija el proveedor del combobox (ver JS más abajo). Si reenvía el formulario por
+        // un error de validación, se conserva lo que ya había seleccionado.
+        $monedaPreseleccionada = trim($_POST['moneda'] ?? 'GTQ');
 
         // Los proveedores de material de empaque seleccionan Entrada de Mercancía (SAP OPDN)
         // en vez de Orden de Compra (OPOR) al reportar su factura — misma forma de datos
@@ -134,7 +136,7 @@ class ProveedorController
 
             if ($nit) {
                 $stmt = $dbCajas->prepare("
-                SELECT serie, numero_dte, fecha_emision, gran_total, iva, nombre_emisor, usado
+                SELECT serie, numero_dte, fecha_emision, gran_total, iva, nombre_emisor, usado, moneda
                 FROM dte 
                 WHERE nit_emisor = ?
                   AND (usado IS NULL OR usado = 'X' OR usado = '')
@@ -171,7 +173,7 @@ class ProveedorController
                     $nit = trim($proveedor['nit'] ?? '');
                     if ($nit) {
                         $stmt = $dbCajas->prepare("
-                        SELECT serie, numero_dte, fecha_emision, gran_total, iva, nombre_emisor, usado
+                        SELECT serie, numero_dte, fecha_emision, gran_total, iva, nombre_emisor, usado, moneda
                         FROM dte 
                         WHERE nit_emisor = ?
                           AND (usado IS NULL OR usado = 'X' OR usado = '')

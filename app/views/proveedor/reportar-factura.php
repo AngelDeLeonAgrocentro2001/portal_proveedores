@@ -82,25 +82,32 @@ if (!empty($_POST['facturas_adicionales'])) {
                 <!-- Combobox propio (input + lista filtrable) en vez de <select> nativo: permite
                      buscar por número, fecha o monto con la lista de resultados visible debajo
                      mientras se escribe, cosa que un <select> no puede hacer. -->
+                <?php
+                    $simboloPreseleccionado = $facturaSatPreseleccionada ? ((trim($facturaSatPreseleccionada['moneda'] ?? 'GTQ') ?: 'GTQ') === 'GTQ' ? 'Q' : trim($facturaSatPreseleccionada['moneda'])) : 'Q';
+                ?>
                 <div class="combo-factura-sat" style="position:relative;">
                     <input type="text" id="buscarFacturaSAT" class="form-select" autocomplete="off"
                            placeholder="-- Selecciona una factura SAT --"
-                           value="<?= $facturaSatPreseleccionada ? htmlspecialchars($facturaSatPreseleccionada['serie'] . '-' . $facturaSatPreseleccionada['numero_dte'] . ' | ' . date('d/m/Y', strtotime($facturaSatPreseleccionada['fecha_emision'])) . ' | Q ' . number_format($facturaSatPreseleccionada['gran_total'] ?? 0, 2)) : '' ?>"
+                           value="<?= $facturaSatPreseleccionada ? htmlspecialchars($facturaSatPreseleccionada['serie'] . '-' . $facturaSatPreseleccionada['numero_dte'] . ' | ' . date('d/m/Y', strtotime($facturaSatPreseleccionada['fecha_emision'])) . ' | ' . $simboloPreseleccionado . ' ' . number_format($facturaSatPreseleccionada['gran_total'] ?? 0, 2)) : '' ?>"
                            oninput="filtrarFacturaSAT(this.value)"
                            onfocus="mostrarListaFacturaSAT()"
                            onblur="ocultarListaFacturaSAT()">
                     <input type="hidden" name="factura_sat" id="factura_sat_valor"
                            value="<?= $facturaSatPreseleccionada ? htmlspecialchars($facturaSatPreseleccionada['serie'] . ' ' . $facturaSatPreseleccionada['numero_dte']) : '' ?>">
+                    <input type="hidden" name="moneda" id="moneda_valor" value="<?= htmlspecialchars($monedaPreseleccionada ?? 'GTQ') ?>">
                     <div id="listaFacturaSAT" class="combo-lista">
                         <?php foreach ($facturasSAT as $f): ?>
                         <?php
                             $valor = $f['serie'] . ' ' . $f['numero_dte'];
-                            $textoMostrado = $f['serie'] . '-' . $f['numero_dte'] . ' | ' . date('d/m/Y', strtotime($f['fecha_emision'])) . ' | Q ' . number_format($f['gran_total'] ?? 0, 2);
+                            $monedaDte = trim($f['moneda'] ?? 'GTQ') ?: 'GTQ';
+                            $simboloDte = $monedaDte === 'GTQ' ? 'Q' : $monedaDte;
+                            $textoMostrado = $f['serie'] . '-' . $f['numero_dte'] . ' | ' . date('d/m/Y', strtotime($f['fecha_emision'])) . ' | ' . $simboloDte . ' ' . number_format($f['gran_total'] ?? 0, 2);
                         ?>
                         <div class="combo-item"
                              data-value="<?= htmlspecialchars($valor) ?>"
                              data-fecha="<?= htmlspecialchars($f['fecha_emision'] ?? '') ?>"
                              data-monto="<?= htmlspecialchars($f['gran_total'] ?? 0) ?>"
+                             data-moneda="<?= htmlspecialchars($monedaDte) ?>"
                              data-texto="<?= htmlspecialchars($textoMostrado) ?>"
                              onmousedown="seleccionarFacturaSAT(this)">
                             <?= htmlspecialchars($textoMostrado) ?>
@@ -121,9 +128,9 @@ if (!empty($_POST['facturas_adicionales'])) {
             <input type="date" name="fecha_emision" id="fecha_emision" value="<?= htmlspecialchars($_POST['fecha_emision'] ?? '') ?>" required>
         </div>
 
-        <?php $simboloMoneda = ($monedaProveedor ?? 'QTZ') === 'QTZ' ? 'Q' : ($monedaProveedor . ' $'); ?>
+        <?php $simboloMonedaInicial = ($monedaPreseleccionada ?? 'GTQ') === 'GTQ' ? 'Q' : $monedaPreseleccionada; ?>
         <div class="form-group">
-            <label>Monto Total (<?= htmlspecialchars($simboloMoneda) ?>) *</label>
+            <label>Monto Total (<span id="simboloMonto"><?= htmlspecialchars($simboloMonedaInicial) ?></span>) *</label>
             <input type="number" name="monto" id="monto" step="0.01" value="<?= htmlspecialchars($_POST['monto'] ?? '') ?>" required>
         </div>
 
@@ -1128,6 +1135,13 @@ function seleccionarFacturaSAT(item) {
     if (fecha) document.getElementById('fecha_emision').value = fecha.substring(0, 10);
     const monto = item.getAttribute('data-monto');
     if (monto) document.getElementById('monto').value = parseFloat(monto).toFixed(2);
+
+    // La moneda real de la factura la trae el propio DTE (columna dte.moneda en cajas_chicas,
+    // GTQ o USD) — se guarda para mandarla tal cual a SAP al enviar, y el símbolo del campo
+    // "Monto Total" se actualiza para reflejarla (Q para GTQ, el código tal cual para otras).
+    const moneda = item.getAttribute('data-moneda') || 'GTQ';
+    document.getElementById('moneda_valor').value = moneda;
+    document.getElementById('simboloMonto').textContent = moneda === 'GTQ' ? 'Q' : moneda;
 
     document.getElementById('listaFacturaSAT').style.display = 'none';
 }

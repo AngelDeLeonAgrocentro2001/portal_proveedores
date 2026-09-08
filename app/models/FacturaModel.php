@@ -15,6 +15,13 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
     $numero_factura = trim($post['numero_factura'] ?? '');
     $fecha_factura_sat = $post['fecha_emision'] ?? date('Y-m-d');
     $monto          = floatval($post['monto'] ?? 0);
+    // Moneda real de la factura, tomada del DTE (dte.moneda en cajas_chicas) al seleccionarla del
+    // combobox — GTQ o USD. Si llega algo distinto (o no llega, ej. factura tecleada a mano sin
+    // seleccionar del listado), se asume GTQ por ser lo más común.
+    $moneda = strtoupper(trim($post['moneda'] ?? 'GTQ'));
+    if (!in_array($moneda, ['GTQ', 'USD'], true)) {
+        $moneda = 'GTQ';
+    }
     $retencion      = floatval($post['retencion'] ?? 0);
     $ordenes_seleccionadas = $post['ordenes'] ?? [];
     // El campo de órdenes es un input hidden name="ordenes[]" que siempre se envía (incluso vacío),
@@ -118,10 +125,10 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
     // INSERT de factura principal con id_usuario y viajes_transporte
     $stmt = $this->pdo->prepare("
         INSERT INTO facturas
-        (cardcode, id_usuario, numero_factura, fecha_factura_sat, fecha_emision, monto, monto_retencion,
+        (cardcode, id_usuario, numero_factura, fecha_factura_sat, fecha_emision, monto, moneda, monto_retencion,
          contrasena_pago, fecha_pago_esperada, fecha_inicio_credito, pdf_factura, pdf_constancia,
          viajes, viajes_transporte_ids, comentario_transporte, viajes_data, estado, ordenes_relacionadas, es_doble_factura)
-        VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     $stmt->execute([
@@ -130,6 +137,7 @@ public function reportarFactura($post, $files, $cardcode, $id_usuario = null) {
         $numero_factura,
         $fecha_factura_sat,
         $monto_total,
+        $moneda,
         $retencion,
         $contrasena,
         $fecha_pago_esperada,

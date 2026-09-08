@@ -1312,11 +1312,15 @@ class ContabilidadController
         // proyecto hermano agrocaja-chica para estos dos casos.
         $tipoDocumentoFiscal = $esPequeñoContribuyente ? 'FP' : 'FN';
 
-        // Moneda real del proveedor en SAP (OCRD.Currency) — antes se mandaba siempre QTZ fijo.
-        // Si el proveedor factura en moneda extranjera (USD, etc.), se manda en esa moneda con
-        // su tipo de cambio real (tabla ORTT); si no hay tipo de cambio cargado para esa fecha,
-        // no se puede armar el documento correctamente y se avisa en vez de asumir 1:1.
-        $monedaFactura = $proveedorModel->getMonedaSAP($cardCode);
+        // Moneda real de la factura — se toma de facturas.moneda (guardada al reportar, tomada
+        // a su vez del propio DTE en cajas_chicas: dte.moneda, GTQ o USD), NO de la moneda por
+        // defecto del proveedor en SAP: el DTE es la fuente de verdad de en qué moneda se emitió
+        // esta factura en particular. GTQ se traduce al código real que usa SAP para moneda
+        // local en esta empresa ('QTZ'); todo lo demás (USD, etc.) se manda tal cual. Si es
+        // moneda extranjera, se necesita su tipo de cambio real (tabla ORTT de SAP); si no hay
+        // uno cargado para esa fecha, no se puede armar el documento y se avisa en vez de asumir 1:1.
+        $monedaFacturaLocal = strtoupper(trim($factura['moneda'] ?? 'GTQ')) ?: 'GTQ';
+        $monedaFactura = $monedaFacturaLocal === 'GTQ' ? 'QTZ' : $monedaFacturaLocal;
         $tipoCambioFactura = $proveedorModel->getTipoCambioSAP($monedaFactura, $docDate);
         if ($tipoCambioFactura === null) {
             $this->logout_sap();
