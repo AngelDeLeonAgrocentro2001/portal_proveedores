@@ -796,7 +796,7 @@ HTML;
         // Obtener el detalle COMPLETO de la orden desde SAP
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             // Query mejorado para obtener TODOS los datos
             $query = "
@@ -813,9 +813,9 @@ HTML;
                 COALESCE(T0.\"Comments\", '') as \"Observaciones\",
                 T1.\"LineTotal\" as \"MontoLinea\",
                 T1.\"LineNum\" as \"NumeroLinea\"
-            FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
-                INNER JOIN \"T_GT_AGROCENTRO_2016\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
-                INNER JOIN \"T_GT_AGROCENTRO_2016\".OACT T2 ON T1.\"AcctCode\" = T2.\"AcctCode\"
+            FROM \"" . SAP_SCHEMA . "\".OPOR T0
+                INNER JOIN \"" . SAP_SCHEMA . "\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+                INNER JOIN \"" . SAP_SCHEMA . "\".OACT T2 ON T1.\"AcctCode\" = T2.\"AcctCode\"
             WHERE T0.\"CardCode\" = ? 
                 AND T0.\"DocEntry\" = ?
                 AND T0.\"DocStatus\" = 'O'

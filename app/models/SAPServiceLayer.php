@@ -4,7 +4,7 @@ require_once BASE_PATH . 'database/DatabaseSAP.php';
 
 class SAPServiceLayer {
     private $baseUrl = 'https://192.168.1.9:50000/b1s/v1/';
-    private $companyDB = 'T_GT_AGROCENTRO_2016';
+    private $companyDB = SAP_SCHEMA;
     private $username = 'manager';
     private $password = 'Team64110';
     private $cookieFile = null;

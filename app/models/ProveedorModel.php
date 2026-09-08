@@ -28,12 +28,12 @@ class ProveedorModel {
 
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $query = "
                 SELECT T1.\"ExtraDays\" AS \"extradays\"
-                FROM \"T_GT_AGROCENTRO_2016\".OCRD T0
-                INNER JOIN \"T_GT_AGROCENTRO_2016\".OCTG T1 ON T0.\"GroupNum\" = T1.\"GroupNum\"
+                FROM \"" . SAP_SCHEMA . "\".OCRD T0
+                INNER JOIN \"" . SAP_SCHEMA . "\".OCTG T1 ON T0.\"GroupNum\" = T1.\"GroupNum\"
                 WHERE T0.\"CardCode\" = ?
             ";
 
@@ -111,7 +111,7 @@ class ProveedorModel {
     public function getOrdenesCompraByCardcode($cardcode, $estado = 'abierta') {
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $añoActual = date('Y');   // Toma el año actual automáticamente (2026)
 
@@ -126,7 +126,7 @@ class ProveedorModel {
                         WHEN T0.\"DocStatus\" = 'O' THEN 'abierta' 
                         ELSE 'cerrada' 
                     END AS \"estado\"
-                FROM \"T_GT_AGROCENTRO_2016\".OPOR T0 
+                FROM \"" . SAP_SCHEMA . "\".OPOR T0 
                 WHERE T0.\"CardCode\" = ?
                   AND YEAR(T0.\"DocDate\") = ?
             ";
@@ -185,12 +185,12 @@ class ProveedorModel {
         }
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $placeholders = implode(',', array_fill(0, count($docentries), '?'));
             $query = "
                 SELECT T1.\"DocEntry\" AS \"docentry\", SUM(T1.\"OpenSum\" * (1 + (T1.\"VatPrcnt\" / 100))) AS \"saldopendiente\"
-                FROM \"T_GT_AGROCENTRO_2016\".POR1 T1
+                FROM \"" . SAP_SCHEMA . "\".POR1 T1
                 WHERE T1.\"DocEntry\" IN ($placeholders) AND T1.\"LineStatus\" = 'O'
                 GROUP BY T1.\"DocEntry\"
             ";
@@ -227,15 +227,15 @@ class ProveedorModel {
         }
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $placeholders = implode(',', array_fill(0, count($docentries), '?'));
             $query = "
                 SELECT T1.\"DocEntry\" AS \"docentry\", T0.\"DocNum\" AS \"docnum\", T1.\"LineNum\" AS \"linenum\",
                        T1.\"Dscription\" AS \"descripcion\",
                        (T1.\"OpenSum\" * (1 + (T1.\"VatPrcnt\" / 100))) AS \"saldopendiente\"
-                FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
-                INNER JOIN \"T_GT_AGROCENTRO_2016\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+                FROM \"" . SAP_SCHEMA . "\".OPOR T0
+                INNER JOIN \"" . SAP_SCHEMA . "\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
                 WHERE T1.\"DocEntry\" IN ($placeholders) AND T1.\"LineStatus\" = 'O'
                 ORDER BY T1.\"DocEntry\", T1.\"LineNum\"
             ";
@@ -279,7 +279,7 @@ class ProveedorModel {
     public function getEntradasMercanciaByCardcode($cardcode, $estado = 'abierta') {
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $query = "
                 SELECT
@@ -296,8 +296,8 @@ class ProveedorModel {
                     T1.\"ItemCode\"  AS \"itemcode\",
                     T1.\"Dscription\" AS \"descripcion\",
                     T1.\"Quantity\"  AS \"cantidad\"
-                FROM \"T_GT_AGROCENTRO_2016\".OPDN T0
-                INNER JOIN \"T_GT_AGROCENTRO_2016\".PDN1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+                FROM \"" . SAP_SCHEMA . "\".OPDN T0
+                INNER JOIN \"" . SAP_SCHEMA . "\".PDN1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
                 WHERE T0.\"CardCode\" = ?
                   AND T0.\"CANCELED\" <> 'Y'
             ";
@@ -360,7 +360,7 @@ class ProveedorModel {
     public function getEntradasMercanciaFlatByCardcode($cardcode, $estado = 'abierta') {
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $query = "
                 SELECT
@@ -373,7 +373,7 @@ class ProveedorModel {
                         WHEN T0.\"DocStatus\" = 'O' THEN 'abierta'
                         ELSE 'cerrada'
                     END AS \"estado\"
-                FROM \"T_GT_AGROCENTRO_2016\".OPDN T0
+                FROM \"" . SAP_SCHEMA . "\".OPDN T0
                 WHERE T0.\"CardCode\" = ?
                   AND T0.\"CANCELED\" <> 'Y'
             ";
@@ -448,12 +448,12 @@ class ProveedorModel {
 
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $placeholders = implode(',', array_fill(0, count($docEntries), '?'));
             $query = "
                 SELECT SUM(T0.\"DocTotal\") AS \"total\"
-                FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
+                FROM \"" . SAP_SCHEMA . "\".OPOR T0
                 WHERE T0.\"CardCode\" = ?
                   AND T0.\"DocEntry\" IN ($placeholders)
             ";
@@ -493,12 +493,12 @@ class ProveedorModel {
 
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $placeholders = implode(',', array_fill(0, count($docEntries), '?'));
             $query = "
                 SELECT T0.\"DocEntry\" AS \"docentry\", T0.\"DocTotal\" AS \"monto\"
-                FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
+                FROM \"" . SAP_SCHEMA . "\".OPOR T0
                 WHERE T0.\"DocEntry\" IN ($placeholders)
             ";
 
@@ -532,12 +532,12 @@ class ProveedorModel {
 
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $placeholders = implode(',', array_fill(0, count($docEntries), '?'));
             $query = "
                 SELECT SUM(T0.\"DocTotal\") AS \"total\"
-                FROM \"T_GT_AGROCENTRO_2016\".OPDN T0
+                FROM \"" . SAP_SCHEMA . "\".OPDN T0
                 WHERE T0.\"CardCode\" = ?
                   AND T0.\"DocEntry\" IN ($placeholders)
             ";
@@ -574,12 +574,12 @@ class ProveedorModel {
 
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $placeholders = implode(',', array_fill(0, count($docEntries), '?'));
             $query = "
                 SELECT T0.\"DocEntry\" AS \"docentry\", T0.\"DocTotal\" AS \"monto\"
-                FROM \"T_GT_AGROCENTRO_2016\".OPDN T0
+                FROM \"" . SAP_SCHEMA . "\".OPDN T0
                 WHERE T0.\"DocEntry\" IN ($placeholders)
             ";
 
@@ -718,11 +718,11 @@ class ProveedorModel {
     public function esProveedorContabilidad($cardcode) {
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $query = '
                 SELECT T0."QryGroup9" as "qrygroup9"
-                FROM "T_GT_AGROCENTRO_2016".OCRD T0
+                FROM ' . SAP_SCHEMA . '.OCRD T0
                 WHERE T0."CardCode" = ?
             ';
 

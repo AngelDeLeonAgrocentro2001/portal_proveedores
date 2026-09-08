@@ -57,7 +57,7 @@ class SuperAdminModel {
 
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $query = "
                 SELECT
@@ -65,8 +65,8 @@ class SuperAdminModel {
                     T0.\"CardName\" AS \"cardname\",
                     T0.\"GroupNum\" AS \"groupnum\",
                     T1.\"ExtraDays\" AS \"extradays\"
-                FROM \"T_GT_AGROCENTRO_2016\".OCRD T0
-                INNER JOIN \"T_GT_AGROCENTRO_2016\".OCTG T1 ON T0.\"GroupNum\" = T1.\"GroupNum\"
+                FROM \"" . SAP_SCHEMA . "\".OCRD T0
+                INNER JOIN \"" . SAP_SCHEMA . "\".OCTG T1 ON T0.\"GroupNum\" = T1.\"GroupNum\"
                 WHERE T0.\"CardCode\" = ?
             ";
 

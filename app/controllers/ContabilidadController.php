@@ -966,7 +966,7 @@ class ContabilidadController
 
         // ========== LOGIN A SAP ==========
         error_log("Intentando login en SAP para enviar factura");
-        $loginResult = $this->login_sap('T_GT_AGROCENTRO_2016');
+        $loginResult = $this->login_sap(SAP_SCHEMA);
         if (!$loginResult['success']) {
             error_log("Login SAP Failed: {$loginResult['error']}");
             echo json_encode(['success' => false, 'message' => 'No es posible conectar a SAP, intente más tarde']);
@@ -1641,7 +1641,7 @@ class ContabilidadController
     {
         try {
             $sap = new DatabaseSAP();
-            $conn = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conn = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             if (!$conn) {
                 error_log("verificarNITEnCatalogoSAP - No se pudo conectar a HANA");
@@ -1651,18 +1651,18 @@ class ContabilidadController
             // Probar diferentes nombres de tabla y esquemas
             $queries = [
                 // Tabla @NIT_PN (existente)
-                'SELECT "U_NIT" FROM "T_GT_AGROCENTRO_2016"."@NIT_PN" WHERE "U_NIT" = ?',
+                'SELECT "U_NIT" FROM ' . SAP_SCHEMA . '."@NIT_PN" WHERE "U_NIT" = ?',
                 'SELECT "U_NIT" FROM "@NIT_PN" WHERE "U_NIT" = ?',
 
                 // Posibles nombres alternativos
-                'SELECT "U_NIT" FROM "T_GT_AGROCENTRO_2016"."@NIT_PROVEEDORES" WHERE "U_NIT" = ?',
+                'SELECT "U_NIT" FROM ' . SAP_SCHEMA . '."@NIT_PROVEEDORES" WHERE "U_NIT" = ?',
                 'SELECT "U_NIT" FROM "@NIT_PROVEEDORES" WHERE "U_NIT" = ?',
-                'SELECT "U_NIT" FROM "T_GT_AGROCENTRO_2016"."@NIT_PN_PROVEEDORES" WHERE "U_NIT" = ?',
+                'SELECT "U_NIT" FROM ' . SAP_SCHEMA . '."@NIT_PN_PROVEEDORES" WHERE "U_NIT" = ?',
                 'SELECT "U_NIT" FROM "@NIT_PN_PROVEEDORES" WHERE "U_NIT" = ?',
 
                 // Tabla OCRD (Business Partners) - algunos sistemas validan directamente aquí
-                'SELECT "FederalTaxID" FROM "T_GT_AGROCENTRO_2016".OCRD WHERE "CardType" = \'S\' AND "FederalTaxID" = ?',
-                'SELECT "U_NIT" FROM "T_GT_AGROCENTRO_2016".OCRD WHERE "CardType" = \'S\' AND "U_NIT" = ?'
+                'SELECT "FederalTaxID" FROM ' . SAP_SCHEMA . '.OCRD WHERE "CardType" = \'S\' AND "FederalTaxID" = ?',
+                'SELECT "U_NIT" FROM ' . SAP_SCHEMA . '.OCRD WHERE "CardType" = \'S\' AND "U_NIT" = ?'
             ];
 
             foreach ($queries as $sql) {
@@ -1692,7 +1692,7 @@ class ContabilidadController
     {
         try {
             $sap = new DatabaseSAP();
-            $conn = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conn = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             if (!$conn) {
                 error_log("crearNITEnCatalogoSAP - No se pudo conectar a HANA");
@@ -1718,17 +1718,17 @@ class ContabilidadController
             $queries = [
                 // Tabla @NIT_PN
                 [
-                    'sql' => 'INSERT INTO "T_GT_AGROCENTRO_2016"."@NIT_PN" ("Code", "Name", "U_NIT", "U_Razon", "U_Validador", "U_CardCode") VALUES (?, ?, ?, ?, ?, ?)',
+                    'sql' => 'INSERT INTO ' . SAP_SCHEMA . '."@NIT_PN" ("Code", "Name", "U_NIT", "U_Razon", "U_Validador", "U_CardCode") VALUES (?, ?, ?, ?, ?, ?)',
                     'params' => [$codeStr, $nameStr, $nit, $uRazon, $uValidador, $uCardCode]
                 ],
                 // Tabla @NIT_PROVEEDORES
                 [
-                    'sql' => 'INSERT INTO "T_GT_AGROCENTRO_2016"."@NIT_PROVEEDORES" ("Code", "Name", "U_NIT", "U_Razon", "U_Validador", "U_CardCode") VALUES (?, ?, ?, ?, ?, ?)',
+                    'sql' => 'INSERT INTO ' . SAP_SCHEMA . '."@NIT_PROVEEDORES" ("Code", "Name", "U_NIT", "U_Razon", "U_Validador", "U_CardCode") VALUES (?, ?, ?, ?, ?, ?)',
                     'params' => [$codeStr, $nameStr, $nit, $uRazon, $uValidador, $uCardCode]
                 ],
                 // Solo NIT básico
                 [
-                    'sql' => 'INSERT INTO "T_GT_AGROCENTRO_2016"."@NIT_PN" ("Code", "Name", "U_NIT", "U_Razon", "U_Validador") VALUES (?, ?, ?, ?, ?)',
+                    'sql' => 'INSERT INTO ' . SAP_SCHEMA . '."@NIT_PN" ("Code", "Name", "U_NIT", "U_Razon", "U_Validador") VALUES (?, ?, ?, ?, ?)',
                     'params' => [$codeStr, $nameStr, $nit, $uRazon, $uValidador]
                 ]
             ];
@@ -1759,8 +1759,8 @@ class ContabilidadController
     private function obtenerSiguienteCodigoNITCatalogo($conn)
     {
         $queries = [
-            'SELECT MAX(CAST("Code" AS INT)) as max_code FROM "T_GT_AGROCENTRO_2016"."@NIT_PN" WHERE "Code" IS NOT NULL AND "Code" != \'\'',
-            'SELECT MAX(CAST("Code" AS INT)) as max_code FROM "T_GT_AGROCENTRO_2016"."@NIT_PROVEEDORES" WHERE "Code" IS NOT NULL AND "Code" != \'\''
+            'SELECT MAX(CAST("Code" AS INT)) as max_code FROM ' . SAP_SCHEMA . '."@NIT_PN" WHERE "Code" IS NOT NULL AND "Code" != \'\'',
+            'SELECT MAX(CAST("Code" AS INT)) as max_code FROM ' . SAP_SCHEMA . '."@NIT_PROVEEDORES" WHERE "Code" IS NOT NULL AND "Code" != \'\''
         ];
 
         $maxCode = 13333;
@@ -1788,7 +1788,7 @@ class ContabilidadController
     {
         try {
             $sap = new DatabaseSAP();
-            $conn = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conn = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             if (!$conn) {
                 error_log("verificarNITEnHANA - No se pudo conectar a HANA");
@@ -1817,8 +1817,8 @@ class ContabilidadController
             $queries = [
                 'SELECT "U_NIT" FROM "@NIT_PN" WHERE "U_NIT" = ?',
                 'SELECT "U_NIT" FROM "SAPDBA"."@NIT_PN" WHERE "U_NIT" = ?',
-                'SELECT "U_NIT" FROM "T_GT_AGROCENTRO_2016"."@NIT_PN" WHERE "U_NIT" = ?',
-                'SELECT "U_NIT" FROM "T_GT_AGROCENTRO_2016"."@NIT_PN" WHERE "U_NIT" = ?',
+                'SELECT "U_NIT" FROM ' . SAP_SCHEMA . '."@NIT_PN" WHERE "U_NIT" = ?',
+                'SELECT "U_NIT" FROM ' . SAP_SCHEMA . '."@NIT_PN" WHERE "U_NIT" = ?',
                 'SELECT "U_NIT" FROM "AGROCENTRO"."@NIT_PN" WHERE "U_NIT" = ?'
             ];
 
@@ -1852,7 +1852,7 @@ class ContabilidadController
     {
         try {
             $sap = new DatabaseSAP();
-            $conn = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conn = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             if (!$conn) {
                 error_log("crearNITEnHANA - No se pudo conectar a HANA");
@@ -1876,7 +1876,7 @@ class ContabilidadController
             // Probar diferentes formas del INSERT
             $queries = [
                 'INSERT INTO "@NIT_PN" ("Code", "Name", "U_NIT", "U_Razon", "U_Validador") VALUES (?, ?, ?, ?, ?)',
-                'INSERT INTO "T_GT_AGROCENTRO_2016"."@NIT_PN" ("Code", "Name", "U_NIT", "U_Razon", "U_Validador") VALUES (?, ?, ?, ?, ?)'
+                'INSERT INTO ' . SAP_SCHEMA . '."@NIT_PN" ("Code", "Name", "U_NIT", "U_Razon", "U_Validador") VALUES (?, ?, ?, ?, ?)'
             ];
 
             $success = false;
@@ -1916,7 +1916,7 @@ class ContabilidadController
     {
         $queries = [
             'SELECT MAX(CAST("Code" AS INT)) as max_code FROM "@NIT_PN" WHERE "Code" IS NOT NULL AND "Code" != \'\'',
-            'SELECT MAX(CAST("Code" AS INT)) as max_code FROM "T_GT_AGROCENTRO_2016"."@NIT_PN" WHERE "Code" IS NOT NULL AND "Code" != \'\''
+            'SELECT MAX(CAST("Code" AS INT)) as max_code FROM ' . SAP_SCHEMA . '."@NIT_PN" WHERE "Code" IS NOT NULL AND "Code" != \'\''
         ];
 
         $maxCode = 13333; // Código inicial por defecto
@@ -1959,13 +1959,13 @@ class ContabilidadController
 
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             // Query para obtener centro de costo
             $query = "
             SELECT DISTINCT T1.\"OcrCode\" 
-            FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
-            INNER JOIN \"T_GT_AGROCENTRO_2016\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+            FROM \"" . SAP_SCHEMA . "\".OPOR T0
+            INNER JOIN \"" . SAP_SCHEMA . "\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
             WHERE T0.\"DocEntry\" = ? AND T0.\"CardCode\" = ?
             LIMIT 1
         ";
@@ -2017,7 +2017,7 @@ class ContabilidadController
     {
         try {
             $sap = new DatabaseSAP();
-            $conn = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conn = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             if (!$conn) {
                 error_log("getRetencionesDisponibles - No se pudo conectar a HANA");
@@ -2026,9 +2026,9 @@ class ContabilidadController
 
             $query = '
                 SELECT T1."WTCode" as "wtcode", T2."WTName" as "wtname"
-                FROM "T_GT_AGROCENTRO_2016".OCRD T0
-                LEFT OUTER JOIN "T_GT_AGROCENTRO_2016".CRD4 T1 ON T0."CardCode" = T1."CardCode"
-                INNER JOIN "T_GT_AGROCENTRO_2016".OWHT T2 ON T1."WTCode" = T2."WTCode"
+                FROM ' . SAP_SCHEMA . '.OCRD T0
+                LEFT OUTER JOIN ' . SAP_SCHEMA . '.CRD4 T1 ON T0."CardCode" = T1."CardCode"
+                INNER JOIN ' . SAP_SCHEMA . '.OWHT T2 ON T1."WTCode" = T2."WTCode"
                 WHERE T0."CardCode" = ?
             ';
 
@@ -2098,11 +2098,11 @@ class ContabilidadController
     {
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $query = "
                 SELECT SUM(T1.\"OpenSum\" * (1 + (T1.\"VatPrcnt\" / 100))) as \"totalpendiente\"
-                FROM \"T_GT_AGROCENTRO_2016\".POR1 T1
+                FROM \"" . SAP_SCHEMA . "\".POR1 T1
                 WHERE T1.\"DocEntry\" = ? AND T1.\"LineStatus\" = 'O'
             ";
             $stmt = odbc_prepare($conexion, $query);
@@ -2127,7 +2127,7 @@ class ContabilidadController
     {
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             // Query para obtener cabecera y líneas de la orden de compra
             $query = "
@@ -2153,8 +2153,8 @@ class ContabilidadController
                 T1.\"OcrCode3\" as \"costingcode3\",
                 T1.\"LineStatus\" as \"linestatus\",
                 (T1.\"OpenSum\" * (1 + (T1.\"VatPrcnt\" / 100))) as \"openlinetotal\"
-            FROM \"T_GT_AGROCENTRO_2016\".OPOR T0
-            INNER JOIN \"T_GT_AGROCENTRO_2016\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+            FROM \"" . SAP_SCHEMA . "\".OPOR T0
+            INNER JOIN \"" . SAP_SCHEMA . "\".POR1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
             WHERE T0.\"DocEntry\" = ? AND T0.\"CardCode\" = ?
             ORDER BY T1.\"LineNum\"
         ";
@@ -2281,7 +2281,7 @@ class ContabilidadController
     {
         try {
             $sap = new DatabaseSAP();
-            $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
 
             $query = "
             SELECT
@@ -2303,8 +2303,8 @@ class ContabilidadController
                 T1.\"OcrCode\" as \"costingcode\",
                 T1.\"OcrCode2\" as \"costingcode2\",
                 T1.\"OcrCode3\" as \"costingcode3\"
-            FROM \"T_GT_AGROCENTRO_2016\".OPDN T0
-            INNER JOIN \"T_GT_AGROCENTRO_2016\".PDN1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
+            FROM \"" . SAP_SCHEMA . "\".OPDN T0
+            INNER JOIN \"" . SAP_SCHEMA . "\".PDN1 T1 ON T0.\"DocEntry\" = T1.\"DocEntry\"
             WHERE T0.\"DocEntry\" = ? AND T0.\"CardCode\" = ?
             ORDER BY T1.\"LineNum\"
         ";

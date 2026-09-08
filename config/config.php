@@ -15,7 +15,13 @@ define('DB_PASS_PROD', 'agrotransporte2025');
 
 // ========== NOMBRES DE BASES DE DATOS ==========
 define('DB_PORTAL', 'portal_proveedores');
-define('DB_CAJAS',  'cajas_chicas');    
+define('DB_CAJAS',  'cajas_chicas');
+
+// ========== ESQUEMA SAP HANA ==========
+// Nombre completo del esquema de la compañía en SAP Business One / HANA. Se usa como
+// constante en vez de repetir el literal 'T_GT_AGROCENTRO_2016' en cada consulta —
+// si algún día cambia (nueva compañía, renombrado en SAP), se actualiza en un solo lugar.
+define('SAP_SCHEMA', 'T_GT_AGROCENTRO_2016');
 
 // ========== CONFIGURACIÓN GENERAL ==========
 // define('BASE_URL', 'http://192.168.1.12/portal_proveedores/public/');

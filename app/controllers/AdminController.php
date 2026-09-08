@@ -399,7 +399,7 @@ public function getOrdenesDisponibles() {
     try {
         // Conectar a SAP
         $sap = new DatabaseSAP();
-        $conexion = $sap->CONEXION_HANA('T_GT_AGROCENTRO_2016');
+        $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
         
         // Mismo filtro de año que "Mis Órdenes de Compra" (ProveedorModel::getOrdenesCompraByCardcode),
         // para que Compras y el proveedor vean exactamente el mismo conjunto de órdenes abiertas.
@@ -410,7 +410,7 @@ public function getOrdenesDisponibles() {
                 \"DocNum\" as \"numero_oc\",
                 \"DocDate\" as \"fecha\",
                 \"DocTotal\" as \"monto\"
-            FROM \"T_GT_AGROCENTRO_2016\".OPOR
+            FROM \"" . SAP_SCHEMA . "\".OPOR
             WHERE \"CardCode\" = ?
               AND \"DocStatus\" = 'O'
               AND YEAR(\"DocDate\") = ?
