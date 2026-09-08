@@ -1,6 +1,6 @@
 <?php
 if (isset($_SESSION['user'])) {
-    header('Location: ../../public/index.php?controller=proveedor&action=dashboard');
+    header('Location: ' . BASE_URL . 'index.php?controller=proveedor&action=dashboard');
     exit;
 }
 ?>
@@ -10,9 +10,9 @@ if (isset($_SESSION['user'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal Proveedores — Agrocentro</title>
-    <link rel="icon" type="image/x-icon" href="../public/assets/images/LogoPortaldeProveedores.png">
-    <link rel="shortcut icon" href="../public/assets/images/LogoPortaldeProveedores.png">
-    <link rel="stylesheet" href="../public/assets/css/style.css">
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL ?>assets/images/LogoPortaldeProveedores.png">
+    <link rel="shortcut icon" href="<?= BASE_URL ?>assets/images/LogoPortaldeProveedores.png">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -46,13 +46,13 @@ if (isset($_SESSION['user'])) {
 
         <!-- Left photo panel -->
         <div class="relative hidden md:block md:w-[46%] shrink-0 overflow-hidden">
-            <img src="../public/assets/images/imagenlogin.jpg" alt="Agrocentro"
+            <img src="<?= BASE_URL ?>assets/images/imagenlogin.jpg" alt="Agrocentro"
                  class="absolute inset-0 w-full h-full object-cover">
             <div class="absolute inset-0" style="background: linear-gradient(180deg, rgba(14,30,20,0.15) 0%, rgba(14,30,20,0.05) 40%, rgba(14,30,20,0.55) 100%);"></div>
 
             <!-- brand badge -->
             <div class="absolute top-7 left-7 flex items-center gap-2.5 z-10 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-sm">
-                <img src="../public/assets/images/agrocentroLogo.png" alt="Agrocentro" class="h-7 w-auto">
+                <img src="<?= BASE_URL ?>assets/images/agrocentroLogo.png" alt="Agrocentro" class="h-7 w-auto">
                 <div class="leading-tight">
                     <p class="text-[11px] font-extrabold text-gray-700 tracking-wide">AGROCENTRO</p>
                     <p class="text-[9px] text-gray-400 uppercase tracking-widest">Portal de Proveedores</p>
@@ -73,7 +73,7 @@ if (isset($_SESSION['user'])) {
 
             <!-- mobile-only brand (left panel hidden below md) -->
             <div class="flex md:hidden items-center gap-2.5 mb-8">
-                <img src="../public/assets/images/agrocentroLogo.png" alt="Agrocentro" class="h-8 w-auto">
+                <img src="<?= BASE_URL ?>assets/images/agrocentroLogo.png" alt="Agrocentro" class="h-8 w-auto">
                 <div class="leading-tight">
                     <p class="text-xs font-extrabold text-white/90 tracking-wide">AGROCENTRO</p>
                     <p class="text-[9px] text-white/40 uppercase tracking-widest">Portal de Proveedores</p>

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solicitud Enviada - Portal Proveedores</title>
-    <link rel="stylesheet" href="/portal_proveedores/public/assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
     <style>
         body {
             background: linear-gradient(135deg, #006400 0%, #004d00 100%);

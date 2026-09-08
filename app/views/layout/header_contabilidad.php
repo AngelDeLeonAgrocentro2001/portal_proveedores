@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal Proveedores — Contabilidad</title>
-    <link rel="stylesheet" href="/portal_proveedores/public/assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background: #f3f4f6; min-height: 100vh; }
@@ -76,8 +76,8 @@
 
     <header class="site-header">
         <div class="site-header-inner">
-            <a href="/portal_proveedores/public/index.php?controller=proveedor&action=dashboard" class="site-logo">
-                <img src="/portal_proveedores/public/assets/images/agrocentroLogo.png" alt="Agrocentro">
+            <a href="<?= BASE_URL ?>index.php?controller=proveedor&action=dashboard" class="site-logo">
+                <img src="<?= BASE_URL ?>assets/images/agrocentroLogo.png" alt="Agrocentro">
                 <div class="site-logo-text">
                     <span class="site-logo-name">Agrocentro</span>
                     <span class="site-logo-sub">Contabilidad — Gestión de Pagos</span>

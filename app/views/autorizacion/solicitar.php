@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Solicitar Registro - Portal Proveedores</title>
-    <link rel="stylesheet" href="/portal_proveedores/public/assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
     <style>
         body { background: #f0f8f0; }
         .solicitud-container { max-width: 800px; margin: 40px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.1); }

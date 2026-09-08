@@ -7,7 +7,7 @@
 
             <div class="footer-top">
                 <div class="footer-brand">
-                    <img src="/portal_proveedores/public/assets/images/LogoPortaldeProveedores.png" alt="Portal de Proveedores">
+                    <img src="<?= BASE_URL ?>assets/images/LogoPortaldeProveedores.png" alt="Portal de Proveedores">
                     <h2>Agricultura Próspera y<br>Sostenible para Todos</h2>
                     <p>Portal de Proveedores &mdash; Agrocentro</p>
                 </div>
@@ -20,11 +20,11 @@
 
                     <div class="footer-col">
                         <h4>Portal</h4>
-                        <a href="/portal_proveedores/public/index.php?controller=proveedor&action=dashboard">Dashboard</a>
-                        <a href="/portal_proveedores/public/index.php?controller=proveedor&action=misFacturas">Mis Facturas</a>
-                        <a href="/portal_proveedores/public/index.php?controller=proveedor&action=ordenesCompra">Órdenes de Compra</a>
+                        <a href="<?= BASE_URL ?>index.php?controller=proveedor&action=dashboard">Dashboard</a>
+                        <a href="<?= BASE_URL ?>index.php?controller=proveedor&action=misFacturas">Mis Facturas</a>
+                        <a href="<?= BASE_URL ?>index.php?controller=proveedor&action=ordenesCompra">Órdenes de Compra</a>
                         <?php if ($mostrarPagosFooter): ?>
-                        <a href="/portal_proveedores/public/index.php?controller=proveedor&action=pagos">Pagos</a>
+                        <a href="<?= BASE_URL ?>index.php?controller=proveedor&action=pagos">Pagos</a>
                         <?php endif; ?>
                     </div>
 

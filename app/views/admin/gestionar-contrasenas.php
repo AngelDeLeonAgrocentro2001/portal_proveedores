@@ -8,7 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agrosistemas - Gestión de Contraseñas y Autorizaciones</title>
-    <link rel="stylesheet" href="/portal_proveedores/public/assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
     <style>
         .alerta-saldo { background: #fff8e6; border: 1px solid #ffe08a; border-left: 5px solid #b45309; border-radius: 8px; padding: 18px 20px; margin-bottom: 20px; }
         .alerta-saldo h3 { font-size: 1.05rem; color: #856404; }

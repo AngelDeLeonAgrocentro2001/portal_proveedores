@@ -1,6 +1,6 @@
 <?php
 if (isset($_SESSION['user'])) {
-    header('Location: ../../public/index.php?controller=proveedor&action=dashboard');
+    header('Location: ' . BASE_URL . 'index.php?controller=proveedor&action=dashboard');
     exit;
 }
 ?>
@@ -10,9 +10,9 @@ if (isset($_SESSION['user'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Recuperar Contraseña — Portal Proveedores Agrocentro</title>
-    <link rel="icon" type="image/x-icon" href="../public/assets/images/LogoPortaldeProveedores.png">
-    <link rel="shortcut icon" href="../public/assets/images/LogoPortaldeProveedores.png">
-    <link rel="stylesheet" href="../public/assets/css/style.css">
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL ?>assets/images/LogoPortaldeProveedores.png">
+    <link rel="shortcut icon" href="<?= BASE_URL ?>assets/images/LogoPortaldeProveedores.png">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -45,7 +45,7 @@ if (isset($_SESSION['user'])) {
          style="background: linear-gradient(165deg, #16351F 0%, #0E1E14 100%);">
 
         <div class="flex items-center gap-2.5 mb-8">
-            <img src="../public/assets/images/agrocentroLogo.png" alt="Agrocentro" class="h-8 w-auto">
+            <img src="<?= BASE_URL ?>assets/images/agrocentroLogo.png" alt="Agrocentro" class="h-8 w-auto">
             <div class="leading-tight">
                 <p class="text-xs font-extrabold text-white/90 tracking-wide">AGROCENTRO</p>
                 <p class="text-[9px] text-white/40 uppercase tracking-widest">Portal de Proveedores</p>
