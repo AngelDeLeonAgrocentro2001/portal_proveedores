@@ -95,6 +95,10 @@ class ProveedorController
             exit;
         }
 
+        // Moneda real del proveedor en SAP (OCRD.Currency) — para que el campo de monto muestre
+        // el símbolo correcto (Q o $) según en qué moneda factura realmente el proveedor.
+        $monedaProveedor = $proveedorModel->getMonedaSAP($cardcode);
+
         // Los proveedores de material de empaque seleccionan Entrada de Mercancía (SAP OPDN)
         // en vez de Orden de Compra (OPOR) al reportar su factura — misma forma de datos
         // (docentry/numero_oc/fecha/monto/moneda/estado), así que el modal de selección y el

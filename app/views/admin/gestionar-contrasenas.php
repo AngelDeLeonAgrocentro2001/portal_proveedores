@@ -470,13 +470,13 @@
                             <div style="font-size:0.8rem; margin-top:5px;">
                                 <a href="#" onclick="verDocumentosProveedor(<?= $prov['id'] ?>)" class="documentos-link">📄 Ver Documentos</a>
                                 <?php if (!empty($prov['pdf_rtu'])): ?>
-                                    | <a href="/portal_proveedores/<?= $prov['pdf_rtu'] ?>" target="_blank" class="documentos-link">RTU</a>
+                                    | <a href="<?= BASE_URL . ltrim($prov['pdf_rtu'], '/') ?>" target="_blank" class="documentos-link">RTU</a>
                                 <?php endif; ?>
                                 <?php if (!empty($prov['pdf_patente'])): ?>
-                                    | <a href="/portal_proveedores/<?= $prov['pdf_patente'] ?>" target="_blank" class="documentos-link">Patente</a>
+                                    | <a href="<?= BASE_URL . ltrim($prov['pdf_patente'], '/') ?>" target="_blank" class="documentos-link">Patente</a>
                                 <?php endif; ?>
                                 <?php if (!empty($prov['pdf_cedula'])): ?>
-                                    | <a href="/portal_proveedores/<?= $prov['pdf_cedula'] ?>" target="_blank" class="documentos-link">Cédula</a>
+                                    | <a href="<?= BASE_URL . ltrim($prov['pdf_cedula'], '/') ?>" target="_blank" class="documentos-link">Cédula</a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -645,7 +645,7 @@
                 <?php if (!empty($factura['pdf_factura'])): ?>
                     <div style="margin-top: 20px;">
                         <h3>📎 Factura PDF</h3>
-                        <iframe src="/portal_proveedores/<?= $factura['pdf_factura'] ?>" 
+                        <iframe src="<?= BASE_URL . ltrim($factura['pdf_factura'], '/') ?>"
                                 style="width:100%; height:500px; border:1px solid #ddd;" frameborder="0">
                         </iframe>
                     </div>

@@ -121,8 +121,9 @@ if (!empty($_POST['facturas_adicionales'])) {
             <input type="date" name="fecha_emision" id="fecha_emision" value="<?= htmlspecialchars($_POST['fecha_emision'] ?? '') ?>" required>
         </div>
 
+        <?php $simboloMoneda = ($monedaProveedor ?? 'QTZ') === 'QTZ' ? 'Q' : ($monedaProveedor . ' $'); ?>
         <div class="form-group">
-            <label>Monto Total (Q) *</label>
+            <label>Monto Total (<?= htmlspecialchars($simboloMoneda) ?>) *</label>
             <input type="number" name="monto" id="monto" step="0.01" value="<?= htmlspecialchars($_POST['monto'] ?? '') ?>" required>
         </div>
 
@@ -224,7 +225,7 @@ if (!empty($_POST['facturas_adicionales'])) {
 
         <?php if (($proveedor['tipo_proveedor'] ?? '') === 'material_empaque'): ?>
         <div class="form-group">
-            <label>Constancia de Recepción (opcional)</label>
+            <label>Constancia de Recepción</label>
             <input type="file" name="pdf_constancia" accept=".pdf">
         </div>
         <?php endif; ?>

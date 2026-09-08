@@ -1312,6 +1312,21 @@ class ContabilidadController
         // proyecto hermano agrocaja-chica para estos dos casos.
         $tipoDocumentoFiscal = $esPequeñoContribuyente ? 'FP' : 'FN';
 
+        // Moneda real del proveedor en SAP (OCRD.Currency) — antes se mandaba siempre QTZ fijo.
+        // Si el proveedor factura en moneda extranjera (USD, etc.), se manda en esa moneda con
+        // su tipo de cambio real (tabla ORTT); si no hay tipo de cambio cargado para esa fecha,
+        // no se puede armar el documento correctamente y se avisa en vez de asumir 1:1.
+        $monedaFactura = $proveedorModel->getMonedaSAP($cardCode);
+        $tipoCambioFactura = $proveedorModel->getTipoCambioSAP($monedaFactura, $docDate);
+        if ($tipoCambioFactura === null) {
+            $this->logout_sap();
+            echo json_encode([
+                'success' => false,
+                'message' => "El proveedor factura en $monedaFactura pero no hay tipo de cambio cargado en SAP para la fecha $docDate. Carga el tipo de cambio en SAP (tabla de tipos de cambio) e intenta de nuevo."
+            ]);
+            exit;
+        }
+
         $purchaseInvoice = [
             "DocType" => "dDocument_Service",
             "CardCode" => $cardCode,
@@ -1327,8 +1342,8 @@ class ContabilidadController
             "U_F_Tipo" => $tipoDocumentoFiscal,
             "Series" => 82,  // ← CAMBIADO a 653 según tu ejemplo (antes era 82)
             "NumAtCard" => $factura['numero_factura'] . '-' . $factura_id,  // Formato como en ejemplo
-            "DocCurrency" => "QTZ",
-            "DocRate" => 1,
+            "DocCurrency" => $monedaFactura,
+            "DocRate" => $tipoCambioFactura,
             "DocumentLines" => $documentLines
         ];
 

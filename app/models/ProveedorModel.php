@@ -53,6 +53,84 @@ class ProveedorModel {
         }
     }
 
+    // Moneda real del proveedor según SAP (OCRD.Currency) — usada para que el proveedor reporte
+    // y se le facture en su moneda real (USD, etc.) en vez de asumir siempre Quetzales. En SAP,
+    // "##" (o vacío) significa "moneda local del sistema" (Quetzales en esta empresa); cualquier
+    // otro código (USD, EUR, ...) es una moneda extranjera real. Devuelve el código de moneda
+    // local por defecto ('QTZ', la que ya usa el resto del sistema) si SAP no responde o el
+    // proveedor no tiene moneda extranjera asignada.
+    public function getMonedaSAP($cardcode) {
+        if (empty($cardcode)) {
+            return 'QTZ';
+        }
+
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
+
+            $query = "
+                SELECT T0.\"Currency\" AS \"currency\"
+                FROM \"" . SAP_SCHEMA . "\".OCRD T0
+                WHERE T0.\"CardCode\" = ?
+            ";
+
+            $stmt = odbc_prepare($conexion, $query);
+            if (!$stmt || !odbc_execute($stmt, [$cardcode])) {
+                throw new Exception("Error ejecutando consulta: " . odbc_errormsg($conexion));
+            }
+
+            $row = odbc_fetch_object($stmt);
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            $currency = trim($row->currency ?? '');
+            // "##" = moneda local del sistema (no una moneda extranjera real asignada al proveedor)
+            return ($currency === '' || $currency === '##') ? 'QTZ' : $currency;
+        } catch (Exception $e) {
+            error_log("Error al consultar moneda en SAP: " . $e->getMessage());
+            return 'QTZ';
+        }
+    }
+
+    // Tipo de cambio real registrado en SAP (tabla ORTT) para una moneda extranjera en una
+    // fecha dada — necesario para DocRate al crear un documento en moneda distinta a la local
+    // (QTZ), ya que Service Layer lo exige explícito. Si no hay tipo de cambio cargado
+    // exactamente para esa fecha, usa el más reciente disponible en o antes de esa fecha (mismo
+    // criterio que usa SAP internamente cuando no hay tasa del día). Devuelve null si SAP no
+    // responde o no hay ningún tipo de cambio cargado para esa moneda — el llamador debe decidir
+    // qué hacer en ese caso (no se puede asumir 1:1 para una moneda extranjera real).
+    public function getTipoCambioSAP($moneda, $fecha) {
+        if (empty($moneda) || $moneda === 'QTZ') {
+            return 1.0;
+        }
+
+        try {
+            $sap = new DatabaseSAP();
+            $conexion = $sap->CONEXION_HANA(SAP_SCHEMA);
+
+            $query = "
+                SELECT TOP 1 T0.\"Rate\" AS \"rate\"
+                FROM \"" . SAP_SCHEMA . "\".ORTT T0
+                WHERE T0.\"Currency\" = ? AND T0.\"RateDate\" <= ?
+                ORDER BY T0.\"RateDate\" DESC
+            ";
+
+            $stmt = odbc_prepare($conexion, $query);
+            if (!$stmt || !odbc_execute($stmt, [$moneda, $fecha])) {
+                throw new Exception("Error ejecutando consulta: " . odbc_errormsg($conexion));
+            }
+
+            $row = odbc_fetch_object($stmt);
+            odbc_free_result($stmt);
+            odbc_close($conexion);
+
+            return ($row && (float)$row->rate > 0) ? (float)$row->rate : null;
+        } catch (Exception $e) {
+            error_log("Error al consultar tipo de cambio en SAP: " . $e->getMessage());
+            return null;
+        }
+    }
+
     // "Pendiente" = cualquier estado que siga vivo en el flujo (no pagada, no rechazada) —
     // reportada, validada, revision_compras, aprobada_compras, en_sap, aprobado_para_pago,
     // confirmacion_pago, aprobada_finanzas. Las rechazadas (compras/finanzas/contabilidad) no
