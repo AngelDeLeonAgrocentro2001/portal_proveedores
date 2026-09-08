@@ -28,12 +28,19 @@ if (!in_array($controller, $allowed_controllers)) {
 
 $action = $_GET['action'] ?? 'login';  // Esta línea debe estar DESPUÉS de la validación
 
-$controllerFile = BASE_PATH . "app/controllers/" . ucfirst($controller) . "Controller.php";
+// ucfirst() solo pone en mayúscula la primera letra ('superadmin' -> 'Superadmin'), pero el
+// archivo/clase real es "SuperAdminController" (con A mayúscula en medio). En Windows esto
+// nunca falla porque el sistema de archivos no distingue mayúsculas/minúsculas, pero en Linux
+// (producción) sí, y "SuperadminController.php" no existe -> "Controlador no encontrado".
+$controllerNameMap = ['superadmin' => 'SuperAdmin'];
+$controllerName = $controllerNameMap[$controller] ?? ucfirst($controller);
+
+$controllerFile = BASE_PATH . "app/controllers/" . $controllerName . "Controller.php";
 
 if (file_exists($controllerFile)) {
     require_once $controllerFile;
-    
-    $className = ucfirst($controller) . "Controller";
+
+    $className = $controllerName . "Controller";
     if (class_exists($className)) {
         $ctrl = new $className();
         
