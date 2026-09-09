@@ -1411,12 +1411,23 @@ class ContabilidadController
             exit;
         }
 
+        // Factura de Artículos (material_empaque enlazado): igual que en una factura de Artículos
+        // real generada desde SAP (referencia: DocEntry 551610), cada línea lleva también su
+        // propia Currency/Rate además del encabezado.
+        if ($esItemsMaterialEmpaqueEnlazado) {
+            foreach ($documentLines as &$dl) {
+                $dl['Currency'] = $monedaFactura;
+                $dl['Rate'] = $tipoCambioFactura;
+            }
+            unset($dl);
+        }
+
         $purchaseInvoice = [
-            // PRUEBA: factura de Artículos (dDocuments) solo para material_empaque con Entrada de
-            // Mercancía vinculada — ver bloque de armado de $documentLines más arriba. Todo lo
-            // demás (Orden de Compra normal, o material_empaque sin entrada por ser Q1500 o
-            // menos) sigue enviándose como Servicio (dDocument_Service), igual que siempre.
-            "DocType" => $esItemsMaterialEmpaqueEnlazado ? "dDocuments" : "dDocument_Service",
+            // PRUEBA: factura de Artículos (dDocument_Items) solo para material_empaque con
+            // Entrada de Mercancía vinculada — ver bloque de armado de $documentLines más arriba.
+            // Todo lo demás (Orden de Compra normal, o material_empaque sin entrada por ser Q1500
+            // o menos) sigue enviándose como Servicio (dDocument_Service), igual que siempre.
+            "DocType" => $esItemsMaterialEmpaqueEnlazado ? "dDocument_Items" : "dDocument_Service",
             "CardCode" => $cardCode,
             "U_CODIGO" => $cardCode,
             "DocDate" => $docDate,
