@@ -1301,6 +1301,15 @@ class ContabilidadController
             // el costeo/valoración de inventario, a diferencia del flujo de Servicio de siempre (que
             // nunca toca inventario). Verificar en SAP el asiento contable resultante después de la
             // primera prueba real antes de dejarlo como comportamiento definitivo.
+            //
+            // CORREGIDO: "PriceAfterVAT" en una línea de Artículos es precio POR UNIDAD, no el
+            // total de la línea (a diferencia de una línea de Servicio con Quantity=1, donde daban
+            // igual). La primera prueba real lo mandó como si fuera el total de línea — con
+            // Quantity=20/60,000 eso hizo que SAP terminara usando su propio precio (el de la
+            // Entrada original) y el documento se creó por un monto distinto al de la factura real.
+            // Ahora se calcula primero el total deseado por línea (prorrateado al monto de la
+            // factura, igual que antes) y se divide entre la Quantity real de esa línea para
+            // obtener el precio unitario correcto.
             $lineasAbiertas = array_values(array_filter(
                 $lineasOrden,
                 fn($l) => ($l['LineStatus'] ?? 'O') === 'O' && (float)($l['OpenInvQty'] ?? 0) > 0
@@ -1317,17 +1326,19 @@ class ContabilidadController
 
             foreach ($lineasAbiertas as $index => $linea) {
                 $taxCode = $esPequeñoContribuyente ? 'EXE' : ($linea['TaxCode'] ?? 'IVA');
-                $precioLinea = $totalLineTotalAbiertas > 0
+                $totalDeseadoLinea = $totalLineTotalAbiertas > 0
                     ? $docTotal * ((float)($linea['LineTotal'] ?? 0) / $totalLineTotalAbiertas)
                     : ($docTotal / count($lineasAbiertas));
+                $quantityLinea = (float)$linea['OpenInvQty'];
+                $precioUnitario = $quantityLinea > 0 ? ($totalDeseadoLinea / $quantityLinea) : $totalDeseadoLinea;
 
                 $documentLines[] = [
                     "LineNum" => $index,
                     "ItemCode" => $linea['ItemCode'],
                     "ItemDescription" => $linea['Description'] ?? 'Artículo',
-                    "Quantity" => (float)$linea['OpenInvQty'],
+                    "Quantity" => $quantityLinea,
                     "WarehouseCode" => $linea['WhsCode'] ?? '',
-                    "PriceAfterVAT" => $precioLinea,
+                    "PriceAfterVAT" => $precioUnitario,
                     "TaxCode" => $taxCode,
                     "CostingCode" => $linea['CostingCode'] ?? '',
                     "CostingCode2" => $linea['CostingCode2'] ?? '',
@@ -1337,9 +1348,11 @@ class ContabilidadController
                     "BaseLine" => (int)($linea['BaseLine'] ?? $index),
                     "BaseType" => 20
                 ];
+
+                error_log("PRUEBA material_empaque: documento $docentry línea $index (ItemCode {$linea['ItemCode']}): Quantity=$quantityLinea, total deseado línea=$totalDeseadoLinea, PriceAfterVAT unitario=$precioUnitario.");
             }
 
-            error_log("PRUEBA material_empaque: documento $docentry enlazado como Artículos (BaseType=20), " . count($documentLines) . " línea(s) abiertas cerradas por OpenInvQty completo, PriceAfterVAT prorrateado a Q$docTotal.");
+            error_log("PRUEBA material_empaque: documento $docentry enlazado como Artículos (BaseType=20), " . count($documentLines) . " línea(s) abiertas cerradas por OpenInvQty completo, total factura=Q$docTotal.");
         }
 
         // ========== CONTROL DE SALDO PARA LÍNEAS SIN ENLAZAR (monto fijo o ya cerradas) ==========
