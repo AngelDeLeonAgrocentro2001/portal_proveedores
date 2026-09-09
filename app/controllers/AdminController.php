@@ -292,13 +292,30 @@ class AdminController {
                     ? $proveedorModel->getDetalleSaldoPendienteEntradaMercanciaSAP($docentries)
                     : $proveedorModel->getDetalleSaldoPendienteSAP($docentries);
                 $totalSaldoPendiente = array_sum(array_column($detalleSaldos, 'total'));
-                $diferenciaSaldo = round((float)($factura['monto'] ?? 0) - $totalSaldoPendiente, 2);
+
+                // El saldo pendiente que devuelve SAP (OpenSum) siempre viene en moneda local
+                // (quetzales), sin importar en qué moneda esté la factura. Si la factura es en
+                // USD hay que convertirla a quetzales con el tipo de cambio real de SAP (ORTT)
+                // antes de comparar — comparar los números crudos (ej. USD 1,754.46 contra
+                // Q7,319.75) da una diferencia sin sentido.
+                $monedaFacturaLocal = strtoupper(trim($factura['moneda'] ?? 'GTQ')) ?: 'GTQ';
+                $monedaFacturaSAP = $monedaFacturaLocal === 'GTQ' ? 'QTZ' : $monedaFacturaLocal;
+                $tipoCambioFactura = $proveedorModel->getTipoCambioSAP($monedaFacturaSAP, $factura['fecha_emision'] ?? date('Y-m-d'));
+                $tipoCambioDisponible = $tipoCambioFactura !== null;
+                $tipoCambioFactura = $tipoCambioFactura ?? 1.0;
+                $montoFacturaGTQ = round((float)($factura['monto'] ?? 0) * $tipoCambioFactura, 2);
+
+                $diferenciaSaldo = round($montoFacturaGTQ - $totalSaldoPendiente, 2);
                 if (abs($diferenciaSaldo) > 0.01) {
                     $detalleSaldoPendienteAutorizacion = [
                         'detalle' => $detalleSaldos,
                         'total_saldo_pendiente' => $totalSaldoPendiente,
                         'diferencia' => $diferenciaSaldo,
-                        'es_material_empaque' => $esMaterialEmpaque
+                        'es_material_empaque' => $esMaterialEmpaque,
+                        'monto_factura_gtq' => $montoFacturaGTQ,
+                        'tipo_cambio' => $tipoCambioFactura,
+                        'tipo_cambio_disponible' => $tipoCambioDisponible,
+                        'moneda_factura' => $monedaFacturaLocal
                     ];
                 }
             }

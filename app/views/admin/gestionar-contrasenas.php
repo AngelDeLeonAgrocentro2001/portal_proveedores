@@ -676,6 +676,12 @@
                                 Saldo pendiente real en SAP de <?= $detalleSaldoPendienteAutorizacion['es_material_empaque'] ? 'las entradas' : 'las órdenes' ?> seleccionadas:
                                 <strong>Q <?= number_format($detalleSaldoPendienteAutorizacion['total_saldo_pendiente'], 2) ?></strong>
                                 &nbsp;|&nbsp; Monto de la factura: <strong><?= simboloMoneda($factura['moneda'] ?? null) ?> <?= number_format($factura['monto'], 2) ?></strong>
+                                <?php if (($detalleSaldoPendienteAutorizacion['moneda_factura'] ?? 'GTQ') !== 'GTQ'): ?>
+                                    (≈ Q <?= number_format($detalleSaldoPendienteAutorizacion['monto_factura_gtq'], 2) ?> al tipo de cambio <?= number_format($detalleSaldoPendienteAutorizacion['tipo_cambio'], 4) ?>)
+                                    <?php if (!($detalleSaldoPendienteAutorizacion['tipo_cambio_disponible'] ?? true)): ?>
+                                        <br><span style="color:#dc3545;">⚠️ No se encontró tipo de cambio en SAP para esta fecha; la comparación de arriba usa 1:1 y puede no ser exacta.</span>
+                                    <?php endif; ?>
+                                <?php endif; ?>
                                 &nbsp;|&nbsp; Diferencia:
                                 <strong style="color:<?= $detalleSaldoPendienteAutorizacion['diferencia'] > 0 ? '#dc3545' : '#b45309' ?>;">
                                     Q <?= number_format(abs($detalleSaldoPendienteAutorizacion['diferencia']), 2) ?>
