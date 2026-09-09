@@ -580,7 +580,8 @@ HTML;
                             gran_total,
                             iva,
                             nombre_emisor,
-                            usado
+                            usado,
+                            moneda
                         FROM dte
                         $where
                         ORDER BY fecha_emision DESC

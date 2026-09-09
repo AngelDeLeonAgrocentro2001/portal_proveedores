@@ -46,8 +46,8 @@
                     <td><?= htmlspecialchars($f['serie'] ?? '') ?></td>
                     <td><strong><?= htmlspecialchars($f['numero_dte'] ?? '') ?></strong></td>
                     <td><?= htmlspecialchars($f['nombre_emisor'] ?? '') ?></td>
-                    <td>Q <?= number_format($f['gran_total'] ?? 0, 2) ?></td>
-                    <td>Q <?= number_format($f['iva'] ?? 0, 2) ?></td>
+                    <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['gran_total'] ?? 0, 2) ?></td>
+                    <td><?= simboloMoneda($f['moneda'] ?? null) ?> <?= number_format($f['iva'] ?? 0, 2) ?></td>
                     <td>
                         <span class="status <?= ($f['usado'] ?? 'X') === 'Y' ? 'usada' : 'disponible' ?>">
                             <?= ($f['usado'] ?? 'X') === 'Y' ? 'Ya usada' : 'Disponible' ?>
