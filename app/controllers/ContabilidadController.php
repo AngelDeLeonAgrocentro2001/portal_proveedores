@@ -1171,42 +1171,25 @@ class ContabilidadController
             }
         }
 
-        // Si Compras marcó manualmente una línea específica en el detalle de saldo pendiente
-        // (porque el monto no coincidía exacto con ninguna), se fuerza el enlace real (BaseEntry)
-        // a esa línea aunque el monto no calce — riesgo aceptado explícitamente: para líneas de
-        // monto fijo (Quantity=0) SAP podría ignorar el precio enviado y usar el total completo
-        // de la línea en vez del monto real de la factura. Solo aplica si no hubo ya un enlace
-        // automático (por cantidad real o coincidencia exacta) y si la línea sigue siendo
-        // elegible (abierta, no material_empaque, no orden de Artículos — esto último SÍ es
-        // obligatorio: SAP rechaza esos casos sin excepción, no es un riesgo que se pueda asumir).
-        $lineaSeleccionadaPorCompras = null;
-        if ($totalQuantityEnlazada == 0 && $lineaMontoFijoParaCerrar === null) {
-            $seleccion = json_decode($factura['linea_seleccionada_compras'] ?? 'null', true);
-            if (is_array($seleccion) && (int)($seleccion['docentry'] ?? 0) === (int)$docentry) {
-                foreach ($lineasOrden as $linea) {
-                    if ($linea['LineNum'] === (int)($seleccion['linenum'] ?? -1)) {
-                        $lineaAbierta = ($linea['LineStatus'] ?? 'O') === 'O';
-                        if ($lineaAbierta && !$esMaterialEmpaque && !$esOrdenDeArticulos) {
-                            $lineaSeleccionadaPorCompras = $linea['LineNum'];
-                            error_log("Documento $docentry línea {$linea['LineNum']}: enlace forzado por selección manual de Compras (monto no coincide exacto, riesgo aceptado).");
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-
-        $lineaForzarEnlace = $lineaMontoFijoParaCerrar ?? $lineaSeleccionadaPorCompras;
+        // NOTA: antes, si Compras marcaba manualmente una línea en el detalle de saldo pendiente
+        // (cuando el monto no coincidía exacto), el sistema forzaba el enlace real (BaseEntry) a
+        // esa línea. Una prueba real confirmó que SAP, al recibir una factura de Servicio
+        // enlazada a una línea de una orden/entrada, IGNORA el precio que enviamos y usa el de la
+        // línea de la orden — el documento en SAP quedaba por un monto distinto al de la factura,
+        // y además descuadraba el conteo de saldo local del portal. Por eso ese enlace forzado se
+        // eliminó: la línea que marca Compras queda SOLO como referencia para Contabilidad
+        // (guardada en facturas.linea_seleccionada_compras), sin afectar el envío a SAP.
+        $lineaForzarEnlace = $lineaMontoFijoParaCerrar;
 
         $documentLines = [];
 
         if ($lineaForzarEnlace !== null) {
-            // Caso especial: se enlaza UNA sola línea de monto fijo vía BaseEntry — ya sea porque
-            // el monto de la factura coincide exacto con su saldo pendiente (seguro), o porque
-            // Compras la marcó manualmente en el detalle de saldo pendiente aceptando el riesgo
-            // de que el monto no calce exacto. Esta factura es SOLO para esa línea puntual — no
-            // se mezclan las demás líneas de la orden (pueden estar cerradas por facturas
-            // anteriores sin relación con esta), para no duplicar ni repartir de más el monto.
+            // Caso especial: se enlaza UNA sola línea de monto fijo vía BaseEntry porque el monto
+            // de la factura coincide EXACTO con su saldo pendiente. Es el único caso seguro: SAP
+            // va a usar el monto de la línea, que es el mismo que ya íbamos a facturar. Esta
+            // factura es SOLO para esa línea puntual — no se mezclan las demás líneas de la orden
+            // (pueden estar cerradas por facturas anteriores sin relación con esta), para no
+            // duplicar ni repartir de más el monto.
             $lineaCerrar = null;
             foreach ($lineasOrden as $linea) {
                 if ($linea['LineNum'] === $lineaForzarEnlace) {
@@ -1234,10 +1217,6 @@ class ContabilidadController
             // Ya quedó enlazada de verdad vía BaseEntry — SAP se encarga de cerrarla, no hace
             // falta el control de saldo local (que es solo para líneas que SAP no puede ver).
             $ordenEsMontoFijo = false;
-
-            if ($lineaSeleccionadaPorCompras !== null && $lineaMontoFijoParaCerrar === null) {
-                error_log("Documento $docentry línea $lineaForzarEnlace: enviando enlazada por selección manual de Compras. Monto factura=$docTotal, saldo pendiente de la línea=" . ($lineaCerrar['OpenLineTotal'] ?? 'N/D') . ". Verificar en SAP que el monto quede correcto.");
-            }
         } else {
             // Las líneas SIN enlazar no tienen cantidad para prorratear el monto — si a cada una
             // se le pusiera el monto completo de la factura (como antes), el total enviado a SAP
