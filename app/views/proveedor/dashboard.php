@@ -33,7 +33,8 @@ $etiquetaDocumentos = $esMaterialEmpaque ? 'Ver Entradas de Mercancía' : 'Ver �
     <div class="Recordatorio">
         <h2>Recordatorio</h2>
         <p>
-            En caso de no ser lunes, la contraseña se tomará en cuenta el próximo lunes y solo se pagaran los dias viernes.
+            En caso de no ser lunes, la contraseña se tomará en cuenta el próximo lunes y solo se pagaran los dias viernes. Tomar en cuenta que tienen como fecha limite
+            subir la factura durante el mes. 
         </p>
     </div>
     <a href="index.php?controller=proveedor&action=contacto" class="btn-action secondary">
