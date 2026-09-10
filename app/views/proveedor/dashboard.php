@@ -8,6 +8,12 @@ $esAdmin      = ($rol === 'admin');
 
 // Nueva variable: Mostrar tarjetas de resumen solo para admin y consultas
 $mostrarResumen = in_array($rol, ['admin', 'consultas']);
+
+// Los proveedores de material de empaque vinculan sus facturas a Entradas de Mercancía
+// (SAP OPDN), no a Órdenes de Compra — el botón se rotula acorde. El destino es el mismo
+// (action=ordenesCompra ya distingue el tipo de proveedor y muestra las entradas).
+$esMaterialEmpaque = ($proveedor['tipo_proveedor'] ?? '') === 'material_empaque';
+$etiquetaDocumentos = $esMaterialEmpaque ? 'Ver Entradas de Mercancía' : 'Ver Órdenes de Compra';
 ?>
 
 <div class="dashboard-container">
@@ -47,7 +53,20 @@ $mostrarResumen = in_array($rol, ['admin', 'consultas']);
                 <div class="card-icon">⏳</div>
                 <h3>Pendientes</h3>
                 <p class="big-number"><?= $resumen['pendientes'] ?? 0 ?></p>
-                <small>Q <?= number_format($resumen['monto_pendiente'] ?? 0, 2) ?></small>
+                <small>
+                    <?php
+                    $pendientePorMoneda = $resumen['pendiente_por_moneda'] ?? [];
+                    if (empty($pendientePorMoneda)) {
+                        echo 'Q 0.00';
+                    } else {
+                        $partes = [];
+                        foreach ($pendientePorMoneda as $pm) {
+                            $partes[] = simboloMoneda($pm['moneda'] ?? null) . ' ' . number_format($pm['monto'] ?? 0, 2);
+                        }
+                        echo implode(' + ', $partes);
+                    }
+                    ?>
+                </small>
             </div>
             <div class="card">
                 <div class="card-icon">✅</div>
@@ -72,7 +91,7 @@ $mostrarResumen = in_array($rol, ['admin', 'consultas']);
 
         <a href="index.php?controller=proveedor&action=ordenesCompra" class="btn-action secondary">
             <span class="btn-icon">🛒</span>
-            Ver Órdenes de Compra
+            <?= $etiquetaDocumentos ?>
         </a>
 
         <a href="index.php?controller=proveedor&action=facturasSAT" class="btn-action secondary">

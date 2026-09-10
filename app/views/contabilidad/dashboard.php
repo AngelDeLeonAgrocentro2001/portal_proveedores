@@ -356,7 +356,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
 </div>
 
 <!-- Facturas Enviadas a SAP (Pendientes de autorización de Finanzas) -->
-<h2>📤 Facturas en SAP (Pendientes Autorización Finanzas)</h2>
+<!-- <h2>📤 Facturas en SAP (Pendientes Autorización Finanzas)</h2>
 <div class="table-container">
     <table class="data-table">
         <thead>
@@ -393,7 +393,7 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
             <?php endif; ?>
         </tbody>
     </table>
-</div>
+</div> -->
 
 <h2>💰 Facturas Aprobadas para Pago</h2>
 <div class="table-container">

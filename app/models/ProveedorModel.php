@@ -149,7 +149,24 @@ class ProveedorModel {
             WHERE cardcode = ?
         ");
         $stmt->execute([$cardcode]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        $resumen = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // Monto pendiente desglosado por moneda — no tiene sentido sumar quetzales con dólares
+        // en un solo total. La vista muestra cada moneda con su símbolo; si un proveedor factura
+        // solo en una moneda (lo normal) es una sola fila.
+        $stmtMonedas = $this->pdo->prepare("
+            SELECT COALESCE(NULLIF(TRIM(moneda), ''), 'GTQ') as moneda,
+                   COALESCE(SUM(monto), 0) as monto
+            FROM facturas
+            WHERE cardcode = ?
+              AND estado NOT IN ('pagada','rechazada_compras','rechazada_finanzas','rechazada_contabilidad')
+            GROUP BY COALESCE(NULLIF(TRIM(moneda), ''), 'GTQ')
+            ORDER BY monto DESC
+        ");
+        $stmtMonedas->execute([$cardcode]);
+        $resumen['pendiente_por_moneda'] = $stmtMonedas->fetchAll(PDO::FETCH_ASSOC);
+
+        return $resumen;
     }
 
         public function getUltimasFacturas($cardcode, $limit = 5) {

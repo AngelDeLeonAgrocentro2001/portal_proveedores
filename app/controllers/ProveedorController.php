@@ -716,10 +716,16 @@ HTML;
 
         $pdf->Ln(10);
 
+        // La factura puede estar en quetzales o en dólares (facturas.moneda, tomada del DTE).
+        // El PDF de la contraseña muestra la moneda real, no siempre "Quetzales".
+        $monedaFacturaPdf = strtoupper(trim($factura['moneda'] ?? 'GTQ')) ?: 'GTQ';
+        $etiquetaMonedaPdf = $monedaFacturaPdf === 'USD' ? 'Dólares' : 'Quetzales';
+        $simboloMonedaPdf = simboloMoneda($monedaFacturaPdf);
+
         $pdf->SetFont('helvetica', 'B', 11);
         $pdf->Cell(0, 8, 'RECEPCIÓN DE FACTURAS: DÍA LUNES', 0, 1);
         $pdf->Cell(0, 8, 'DÍA DE PAGO: VIERNES 8:00-12:00 y 14:00-16:00', 0, 1);
-        $pdf->Cell(0, 8, 'Quetzales', 0, 1);
+        $pdf->Cell(0, 8, $etiquetaMonedaPdf, 0, 1);
 
         $pdf->Ln(5);
 
@@ -751,11 +757,11 @@ HTML;
         $pdf->Cell(60, 8, $ordenCompra, 1, 0, 'C');  // Usar la variable limpiada
         $pdf->Cell(60, 8, $factura['numero_factura'], 1, 0, 'C');
         $pdf->Cell(35, 8, date('d/m/Y', strtotime($factura['fecha_emision'])), 1, 0, 'C');
-        $pdf->Cell(35, 8, 'Q ' . number_format($factura['monto'], 2), 1, 1, 'C');
+        $pdf->Cell(35, 8, $simboloMonedaPdf . ' ' . number_format($factura['monto'], 2), 1, 1, 'C');
 
         $pdf->SetFont('helvetica', 'B', 10);
         $pdf->Cell(155, 8, 'TOTAL', 1, 0, 'R');
-        $pdf->Cell(35, 8, 'Q ' . number_format($factura['monto'], 2), 1, 1, 'C');
+        $pdf->Cell(35, 8, $simboloMonedaPdf . ' ' . number_format($factura['monto'], 2), 1, 1, 'C');
 
         $pdf->Ln(10);
 
