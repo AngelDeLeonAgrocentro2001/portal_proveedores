@@ -99,8 +99,39 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                     <?= htmlspecialchars($comparacionOrden['label']) ?>
                 </span>
                 <span style="margin-left:10px; color:#666; font-size:0.85rem;">
-                    Orden: Q <?= number_format($comparacionOrden['monto_orden'], 2) ?>
+                    <?= htmlspecialchars($comparacionOrden['tipo_corto'] ?? 'Orden') ?> (en SAP): Q <?= number_format($comparacionOrden['monto_orden'], 2) ?>
                     &middot; Diferencia: Q <?= number_format($comparacionOrden['diferencia'], 2) ?>
+                    <?php if (($factura['moneda'] ?? 'GTQ') !== 'GTQ' && ($factura['moneda'] ?? '') !== ''): ?>
+                        <br>(factura convertida a quetzales para comparar)
+                    <?php endif; ?>
+                </span>
+            </td>
+        </tr>
+        <?php endif; ?>
+        <?php
+        // Línea que Compras marcó en el detalle de saldo pendiente (solo cuando el monto no
+        // coincidía y se le mostró el desglose). Es trazabilidad — no cambia el envío a SAP.
+        $lineaCompras = json_decode($factura['linea_seleccionada_compras'] ?? 'null', true);
+        ?>
+        <?php if (is_array($lineaCompras) && !empty($lineaCompras)): ?>
+        <tr>
+            <td><strong>Línea marcada por Compras:</strong></td>
+            <td>
+                <?php
+                $tipoDocLinea = (($factura['tipo_proveedor'] ?? '') === 'material_empaque') ? 'Entrada' : 'Orden';
+                ?>
+                <?= $tipoDocLinea ?> <?= htmlspecialchars($lineaCompras['docnum'] ?? '') ?>
+                &middot; Línea <?= (int)($lineaCompras['linenum'] ?? 0) ?>
+                <?php if (!empty($lineaCompras['descripcion'])): ?>
+                    &middot; <?= htmlspecialchars($lineaCompras['descripcion']) ?>
+                <?php endif; ?>
+                <?php if (!empty($lineaCompras['saldo_pendiente'])): ?>
+                    &middot; Saldo: Q <?= number_format($lineaCompras['saldo_pendiente'], 2) ?>
+                <?php endif; ?>
+                <span style="color:#666; font-size:0.8rem; display:block; margin-top:2px;">
+                    Marcada por <?= htmlspecialchars($lineaCompras['seleccionado_por'] ?? 'Compras') ?>
+                    <?php if (!empty($lineaCompras['fecha'])): ?>el <?= htmlspecialchars($lineaCompras['fecha']) ?><?php endif; ?>
+                    — referencia informativa, no cambia el envío a SAP.
                 </span>
             </td>
         </tr>

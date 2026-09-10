@@ -451,6 +451,20 @@ class ContabilidadController
         $retencionesDisponibles = [];
         $proveedorModel = new ProveedorModel();
 
+        // Cache de tipos de cambio por moneda para no consultar SAP una vez por factura en la
+        // lista de abajo. getTipoCambioSAP() ya devuelve 1.0 para QTZ/GTQ o si no hay dato.
+        $tiposCambioCache = [];
+        $getTipoCambio = function ($monedaLocal, $fecha) use ($proveedorModel, &$tiposCambioCache) {
+            $monedaLocal = strtoupper(trim($monedaLocal ?? 'GTQ')) ?: 'GTQ';
+            if ($monedaLocal === 'GTQ') return 1.0;
+            $monedaSAP = 'USD' === $monedaLocal ? 'USD' : $monedaLocal;
+            $clave = $monedaSAP . '|' . $fecha;
+            if (!array_key_exists($clave, $tiposCambioCache)) {
+                $tiposCambioCache[$clave] = $proveedorModel->getTipoCambioSAP($monedaSAP, $fecha) ?? 1.0;
+            }
+            return $tiposCambioCache[$clave];
+        };
+
         $comparacionOrden = null;
         if ($factura) {
             $retencionesDisponibles = $this->getRetencionesDisponibles($factura['cardcode']);
@@ -458,7 +472,8 @@ class ContabilidadController
             $montoOrdenes = $esMaterialEmpaque
                 ? $proveedorModel->getMontoEntradaMercanciaRelacionada($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null)
                 : $proveedorModel->getMontoOrdenesRelacionadas($factura['cardcode'] ?? '', $factura['ordenes_relacionadas'] ?? null);
-            $comparacionOrden = $this->armarComparacionOrden($factura['monto'] ?? 0, $montoOrdenes, $esMaterialEmpaque);
+            $tcFactura = $getTipoCambio($factura['moneda'] ?? 'GTQ', $factura['fecha_emision'] ?? date('Y-m-d'));
+            $comparacionOrden = $this->armarComparacionOrden($factura['monto'] ?? 0, $montoOrdenes, $esMaterialEmpaque, $tcFactura);
         }
 
         // Listar facturas pendientes de envío a SAP (aprobadas por Compras)
@@ -477,7 +492,8 @@ class ContabilidadController
                 $esME = ($f['tipo_proveedor'] ?? '') === 'material_empaque';
                 $mapa = $esME ? $mapaMontosEntradas : $mapaMontosOrdenes;
                 $montoOrdenes = $proveedorModel->getMontoOrdenDesdeMapa($f['ordenes_relacionadas'] ?? null, $mapa);
-                $f['comparacion_orden'] = $this->armarComparacionOrden($f['monto'] ?? 0, $montoOrdenes, $esME);
+                $tcF = $getTipoCambio($f['moneda'] ?? 'GTQ', $f['fecha_emision'] ?? date('Y-m-d'));
+                $f['comparacion_orden'] = $this->armarComparacionOrden($f['monto'] ?? 0, $montoOrdenes, $esME, $tcF);
             }
             unset($f);
         }
@@ -500,13 +516,17 @@ class ContabilidadController
     // mercancía vinculada. Devuelve null si no hay documento vinculado o si SAP no responde (la
     // vista simplemente no muestra la etiqueta en ese caso). Puramente informativo, no afecta
     // el flujo de aprobación.
-    private function armarComparacionOrden($montoFactura, $montoOrdenes, $esMaterialEmpaque = false) {
+    private function armarComparacionOrden($montoFactura, $montoOrdenes, $esMaterialEmpaque = false, $tipoCambioFactura = 1.0) {
         if ($montoOrdenes === null) {
             return null;
         }
 
         $tipoDocumento = $esMaterialEmpaque ? 'Entrada de Mercancía' : 'Orden de Compra';
-        $diferencia = round((float)$montoFactura - $montoOrdenes, 2);
+        // El monto en SAP de la orden/entrada viene en quetzales (moneda local). Si la factura
+        // es en dólares hay que convertirla a quetzales con el tipo de cambio antes de comparar,
+        // si no la diferencia no tiene sentido (se estarían restando dólares menos quetzales).
+        $montoFacturaEnLocal = round((float)$montoFactura * (float)$tipoCambioFactura, 2);
+        $diferencia = round($montoFacturaEnLocal - $montoOrdenes, 2);
 
         if (abs($diferencia) < 0.01) {
             $clase = 'igual';
