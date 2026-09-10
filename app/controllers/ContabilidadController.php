@@ -1305,37 +1305,6 @@ class ContabilidadController
             }
         }
 
-        // ========== CONTROL DE SALDO PARA LÍNEAS SIN ENLAZAR (monto fijo o ya cerradas) ==========
-        // Como estas líneas no se enlazan vía BaseEntry, SAP no descuenta su saldo automáticamente
-        // con esta factura. El saldo base ya NO es el DocTotal original de la orden: se consulta
-        // el saldo pendiente REAL en SAP (OpenSum*(1+VatPrcnt/100) de líneas abiertas de POR1), que ya
-        // refleja cualquier consumo fuera del portal. A eso se le resta lo que el portal mismo ya
-        // envió (que SAP no ve, por no estar enlazado). Para Entrada de Mercancía (material_empaque)
-        // el DocEntry pertenece a OPDN/PDN1, no a OPOR/POR1 — otra secuencia de numeración — así que
-        // no se consulta el saldo vía POR1 (podría coincidir por casualidad con una orden distinta) y
-        // se usa el DocTotal original de la entrada como antes.
-        $saldoPendienteSAP = ($ordenEsMontoFijo && !$esMaterialEmpaque) ? $this->getSaldoPendienteSAP($docentry) : null;
-        if ($ordenEsMontoFijo && ($saldoPendienteSAP !== null || !empty($orden['doctotal']))) {
-            $totalOrden = $saldoPendienteSAP !== null ? $saldoPendienteSAP : (float)($orden['doctotal'] ?? 0);
-            $totalYaFacturado = $this->getTotalFacturadoContraOrden($docentry, $factura_id);
-            $totalConEstaFactura = $totalYaFacturado + $docTotal;
-
-            error_log("Control de saldo orden $docentry: saldo SAP=" . ($saldoPendienteSAP !== null ? $saldoPendienteSAP : 'N/D (usando doctotal)') . ", base usada=$totalOrden, ya facturado por el portal=$totalYaFacturado, con esta factura=$totalConEstaFactura");
-
-            if ($totalConEstaFactura > $totalOrden + 0.01) {
-                $this->logout_sap();
-                echo json_encode([
-                    'success' => false,
-                    'message' => "Esta factura excede el saldo disponible de la orden $docentry. " .
-                        "Saldo pendiente" . ($saldoPendienteSAP !== null ? " en SAP" : " (total de la orden)") . ": Q" . number_format($totalOrden, 2) . ". " .
-                        "Ya facturado por el portal contra ella: Q" . number_format($totalYaFacturado, 2) . ". " .
-                        "Con esta factura (Q" . number_format($docTotal, 2) . ") el total sería Q" . number_format($totalConEstaFactura, 2) . "."
-                ]);
-                exit;
-            }
-        }
-
-
         // Tipo de documento fiscal (UDF U_F_Tipo en el header) — sin esto, la validación de SAP
         // para Pequeño Contribuyente ("NIT Pequeño Contribuyente debe ser Impuesto: EXENTO")
         // rechaza el envío aunque las líneas ya tengan TaxCode=EXE. Mismo mapeo que usa el
@@ -1359,6 +1328,49 @@ class ContabilidadController
                 'message' => "El proveedor factura en $monedaFactura pero no hay tipo de cambio cargado en SAP para la fecha $docDate. Carga el tipo de cambio en SAP (tabla de tipos de cambio) e intenta de nuevo."
             ]);
             exit;
+        }
+
+        // ========== CONTROL DE SALDO PARA LÍNEAS SIN ENLAZAR (monto fijo o ya cerradas) ==========
+        // Como estas líneas no se enlazan vía BaseEntry, SAP no descuenta su saldo automáticamente
+        // con esta factura. El saldo base ya NO es el DocTotal original de la orden: se consulta
+        // el saldo pendiente REAL en SAP (OpenSum*(1+VatPrcnt/100) de líneas abiertas de POR1), que ya
+        // refleja cualquier consumo fuera del portal. A eso se le resta lo que el portal mismo ya
+        // envió (que SAP no ve, por no estar enlazado). Para Entrada de Mercancía (material_empaque)
+        // el DocEntry pertenece a OPDN/PDN1, no a OPOR/POR1 — otra secuencia de numeración — así que
+        // no se consulta el saldo vía POR1 (podría coincidir por casualidad con una orden distinta) y
+        // se usa el DocTotal original de la entrada como antes.
+        //
+        // El saldo de SAP (OpenSum / DocTotal) siempre viene en quetzales (moneda local). Si la
+        // factura es en dólares, se convierte a quetzales con el tipo de cambio de SAP antes de
+        // comparar — si no, se estarían restando dólares menos quetzales.
+        $saldoPendienteSAP = ($ordenEsMontoFijo && !$esMaterialEmpaque) ? $this->getSaldoPendienteSAP($docentry) : null;
+        if ($ordenEsMontoFijo && ($saldoPendienteSAP !== null || !empty($orden['doctotal']))) {
+            $totalOrden = $saldoPendienteSAP !== null ? $saldoPendienteSAP : (float)($orden['doctotal'] ?? 0);
+            // getTotalFacturadoContraOrden() suma facturas.monto de facturas anteriores del portal
+            // contra esta orden/entrada. Se asume que van en la misma moneda que la factura actual
+            // (mismo proveedor, mismo documento) y se convierten a quetzales con el mismo tipo de
+            // cambio para poder compararlas contra el saldo local de SAP.
+            $totalYaFacturadoOrigen = $this->getTotalFacturadoContraOrden($docentry, $factura_id);
+            $totalYaFacturado = round($totalYaFacturadoOrigen * $tipoCambioFactura, 2);
+            $docTotalEnLocal = round($docTotal * $tipoCambioFactura, 2);
+            $totalConEstaFactura = round($totalYaFacturado + $docTotalEnLocal, 2);
+
+            error_log("Control de saldo orden $docentry: saldo SAP=" . ($saldoPendienteSAP !== null ? $saldoPendienteSAP : 'N/D (usando doctotal)') . ", base usada=$totalOrden, ya facturado por el portal (en Q)=$totalYaFacturado, esta factura en Q=$docTotalEnLocal, con esta factura=$totalConEstaFactura");
+
+            if ($totalConEstaFactura > $totalOrden + 0.01) {
+                $this->logout_sap();
+                $notaMoneda = $monedaFacturaLocal !== 'GTQ'
+                    ? " (la factura de $monedaFacturaLocal " . number_format($docTotal, 2) . " equivale a Q" . number_format($docTotalEnLocal, 2) . " al tipo de cambio " . number_format($tipoCambioFactura, 4) . ")"
+                    : "";
+                echo json_encode([
+                    'success' => false,
+                    'message' => "Esta factura excede el saldo disponible de la orden $docentry. " .
+                        "Saldo pendiente" . ($saldoPendienteSAP !== null ? " en SAP" : " (total de la orden)") . ": Q" . number_format($totalOrden, 2) . ". " .
+                        "Ya facturado por el portal contra ella: Q" . number_format($totalYaFacturado, 2) . ". " .
+                        "Con esta factura el total sería Q" . number_format($totalConEstaFactura, 2) . "." . $notaMoneda
+                ]);
+                exit;
+            }
         }
 
         $purchaseInvoice = [
