@@ -96,9 +96,9 @@ if (isset($_SESSION['user'])) {
 
         <!-- Links -->
         <div class="mt-6 text-center text-xs text-gray-400">
-            ¿Eres proveedor?
-            <a href="index.php?controller=auth&action=login" class="hover:text-teal-700 transition-colors font-medium" style="color:#0D7C66;">
-                Inicia sesión aquí
+            ¿Olvidaste tu contraseña?
+            <a href="index.php?controller=auth&action=resetPassword&origin=staff" class="hover:text-teal-700 transition-colors font-medium" style="color:#0D7C66;">
+                Restablécela aquí
             </a>
         </div>
 

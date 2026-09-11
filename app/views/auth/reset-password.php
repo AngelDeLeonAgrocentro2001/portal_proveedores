@@ -3,6 +3,13 @@ if (isset($_SESSION['user'])) {
     header('Location: ' . BASE_URL . 'index.php?controller=proveedor&action=dashboard');
     exit;
 }
+
+// El link de "olvidé mi contraseña" puede venir tanto del login de proveedor como del de
+// personal interno (?origin=staff, ver login_staff.php) — hay que volver al login correcto,
+// no siempre al de proveedor.
+$loginUrl = ($_GET['origin'] ?? '') === 'staff'
+    ? 'index.php?controller=auth&action=loginStaff'
+    : 'index.php?controller=auth&action=login';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -84,7 +91,7 @@ if (isset($_SESSION['user'])) {
         </form>
 
         <p class="mt-6 text-center text-xs text-white/40">
-            <a href="index.php?controller=auth&action=login" class="font-semibold text-bright/90 hover:text-bright transition-colors">← Volver al login</a>
+            <a href="<?= $loginUrl ?>" class="font-semibold text-bright/90 hover:text-bright transition-colors">← Volver al login</a>
         </p>
     </div>
 
@@ -209,7 +216,7 @@ if (isset($_SESSION['user'])) {
                     if (result.success) {
                         showBox(modalSuccess, result.message || '✅ Contraseña actualizada exitosamente.');
                         setTimeout(() => {
-                            window.location.href = 'index.php?controller=auth&action=login';
+                            window.location.href = '<?= $loginUrl ?>';
                         }, 2500);
                     } else {
                         showBox(modalError, result.error || 'Error al actualizar la contraseña');
