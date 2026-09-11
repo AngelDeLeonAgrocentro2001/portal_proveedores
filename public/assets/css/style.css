@@ -329,7 +329,7 @@ body {
     color: var(--dark-text);
     /* Permite que el contenido largo haga wrap, no overflow */
     word-break: break-word;
-    min-width: 80px;
+    min-width: 200px;
 }
 
 .data-table tbody tr:last-child td { border-bottom: none; }
