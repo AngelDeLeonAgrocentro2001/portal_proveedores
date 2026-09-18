@@ -257,6 +257,52 @@ class ContabilidadController
             }
         }
 
+        // Resolver la penalización de pago de una factura que Compras aprobó fuera del plazo
+        // semanal: Contabilidad confirma la fecha de pago original (sin penalizar) o la corre a
+        // uno de los viernes siguientes que la vista ofrece (calculados a partir de esa fecha
+        // original, nunca antes) — ver getFacturasFueraDePlazoPendientes() más abajo.
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['corregir_fecha_pago_penalizacion'])) {
+            $factura_id = $_POST['factura_id'] ?? 0;
+            $nuevaFechaPago = $_POST['nueva_fecha_pago'] ?? '';
+            $usuario = $_SESSION['user']['username'] ?? 'contabilidad';
+
+            $stmtPenalizacion = $this->pdo->prepare("SELECT fecha_pago_esperada, fecha_pago_esperada_original, aprobado_fuera_de_plazo FROM facturas WHERE id = ?");
+            $stmtPenalizacion->execute([$factura_id]);
+            $facturaPenalizacion = $stmtPenalizacion->fetch(PDO::FETCH_ASSOC);
+
+            if (!$factura_id || !$facturaPenalizacion || !$facturaPenalizacion['aprobado_fuera_de_plazo']) {
+                $error = "Esta factura no tiene una penalización de pago pendiente de resolver";
+            } else {
+                $baseOriginal = $facturaPenalizacion['fecha_pago_esperada_original'] ?? $facturaPenalizacion['fecha_pago_esperada'];
+                $opcionesValidas = FacturaModel::viernesDisponiblesParaPenalizacion($baseOriginal, 6);
+
+                if (!in_array($nuevaFechaPago, $opcionesValidas, true)) {
+                    $error = "Fecha de pago no válida — solo se puede elegir entre los viernes ofrecidos, a partir de la fecha original";
+                } else {
+                    $penalizada = ($nuevaFechaPago !== $baseOriginal);
+                    $nota = $penalizada
+                        ? "Aprobó fuera de plazo — penalizó el pago, nueva fecha: " . date('d/m/Y', strtotime($nuevaFechaPago))
+                        : "Aprobó fuera de plazo — confirmó la fecha de pago original, sin penalizar";
+
+                    $stmtUpdPen = $this->pdo->prepare("
+                        UPDATE facturas
+                        SET fecha_pago_esperada = ?,
+                            penalizacion_pago_resuelta = 1,
+                            observaciones_contabilidad = CONCAT(IFNULL(observaciones_contabilidad, ''), '\n[', NOW(), '] ', ?, ' ', ?)
+                        WHERE id = ?
+                    ");
+                    if ($stmtUpdPen->execute([$nuevaFechaPago, $usuario, $nota, $factura_id])) {
+                        $success = $penalizada
+                            ? "Fecha de pago penalizada al " . date('d/m/Y', strtotime($nuevaFechaPago)) . "."
+                            : "Fecha de pago original confirmada, sin penalización.";
+                        $factura = $this->getFacturaById($factura_id);
+                    } else {
+                        $error = "Error al actualizar la fecha de pago";
+                    }
+                }
+            }
+        }
+
         // Procesar envío a SAP
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enviar_sap'])) {
             $factura_id = $_POST['factura_id'] ?? 0;
@@ -498,6 +544,10 @@ class ContabilidadController
             unset($f);
         }
 
+        // Facturas aprobadas por Compras fuera del plazo semanal, pendientes de que Contabilidad
+        // decida si penaliza la fecha de pago.
+        $facturas_fuera_de_plazo = $this->getFacturasFueraDePlazoPendientes();
+
         // Listar facturas en SAP (enviadas, no pagadas)
         $facturas_en_sap = $this->getFacturasEnSAP();
 
@@ -588,6 +638,30 @@ class ContabilidadController
         ");
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // Facturas que Compras aprobó fuera del plazo semanal (después del miércoles) y todavía no
+    // tienen resuelta la decisión de penalización de pago — se muestran como aviso en el
+    // dashboard para que Contabilidad confirme la fecha original o la corra a un viernes
+    // posterior (ContabilidadController::dashboard(), acción corregir_fecha_pago_penalizacion).
+    private function getFacturasFueraDePlazoPendientes()
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT f.*, p.nombre as proveedor_nombre, p.cardcode
+            FROM facturas f
+            JOIN proveedores p ON f.cardcode = p.cardcode
+            WHERE f.aprobado_fuera_de_plazo = 1 AND f.penalizacion_pago_resuelta = 0
+            ORDER BY f.fecha_aprobacion_compras ASC
+            LIMIT 50
+        ");
+        $stmt->execute();
+        $facturas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($facturas as &$f) {
+            $baseOriginal = $f['fecha_pago_esperada_original'] ?? $f['fecha_pago_esperada'];
+            $f['viernes_disponibles'] = FacturaModel::viernesDisponiblesParaPenalizacion($baseOriginal, 6);
+        }
+        unset($f);
+        return $facturas;
     }
 
     private function getFacturasEnSAP()

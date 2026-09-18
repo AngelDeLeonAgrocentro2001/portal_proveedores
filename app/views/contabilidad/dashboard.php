@@ -37,6 +37,55 @@
     </div>
 </div>
 
+<!-- Facturas aprobadas por Compras fuera del plazo semanal (después del miércoles) — pendientes
+     de que Contabilidad confirme la fecha de pago original o la penalice corriéndola a un
+     viernes posterior. No bloquea nada más del flujo; es solo este aviso puntual. -->
+<?php if (!empty($facturas_fuera_de_plazo)): ?>
+<div class="alerta-saldo" style="margin-bottom: 20px;">
+    <h3 style="margin:0 0 10px;">⚠️ Facturas aprobadas fuera del plazo semanal (<?= count($facturas_fuera_de_plazo) ?>)</h3>
+    <p style="margin:0 0 15px; font-size:0.9rem; color:#856404;">
+        Compras las aprobó después del miércoles límite de su semana. Confirma la fecha de pago original (sin penalizar) o corre el pago a un viernes posterior.
+    </p>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Factura</th>
+                <th>Proveedor</th>
+                <th>Monto</th>
+                <th>Aprobada por Compras</th>
+                <th>Fecha de pago original</th>
+                <th>Nueva fecha de pago</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($facturas_fuera_de_plazo as $ffp): ?>
+            <tr>
+                <td><strong><?= htmlspecialchars($ffp['numero_factura']) ?></strong></td>
+                <td><?= htmlspecialchars($ffp['proveedor_nombre']) ?> (<?= htmlspecialchars($ffp['cardcode']) ?>)</td>
+                <td><?= simboloMoneda($ffp['moneda'] ?? null) ?> <?= number_format($ffp['monto'], 2) ?></td>
+                <td><?= safeDateTimeFormat($ffp['fecha_aprobacion_compras'] ?? null) ?></td>
+                <td><?= safeDateFormat($ffp['fecha_pago_esperada_original'] ?? $ffp['fecha_pago_esperada']) ?></td>
+                <td>
+                    <form method="POST" style="display:flex; gap:8px; align-items:center;">
+                        <input type="hidden" name="corregir_fecha_pago_penalizacion" value="1">
+                        <input type="hidden" name="factura_id" value="<?= $ffp['id'] ?>">
+                        <select name="nueva_fecha_pago" required style="padding:6px; border-radius:4px; border:1px solid #ccc;">
+                            <?php foreach ($ffp['viernes_disponibles'] as $idx => $viernes): ?>
+                                <option value="<?= $viernes ?>">
+                                    <?= date('d/m/Y', strtotime($viernes)) ?><?= $idx === 0 ? ' (original, sin penalizar)' : ' (+' . $idx . ' semana' . ($idx > 1 ? 's' : '') . ')' ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button type="submit" class="btn-small">Confirmar</button>
+                    </form>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+<?php endif; ?>
+
 <!-- Buscador -->
 <div class="search-box">
     <h2>🔍 Buscar Factura</h2>
@@ -769,6 +818,12 @@ window.onclick = function(event) {
 </script>
 
 <style>
+/* Aviso de facturas fuera de plazo — mismo estilo que .alerta-saldo en gestionar-contrasenas.php */
+.alerta-saldo { background: #fff8e6; border: 1px solid #ffe08a; border-left: 5px solid #b45309; border-radius: 8px; padding: 18px 20px; }
+.alerta-saldo h3 { font-size: 1.05rem; color: #856404; }
+.alerta-saldo .data-table { width: 100%; border-collapse: collapse; background: white; }
+.alerta-saldo .data-table th, .alerta-saldo .data-table td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 0.9rem; }
+
 .btn-reporte {
     transition: all 0.3s ease;
 }

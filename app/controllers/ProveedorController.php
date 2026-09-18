@@ -21,6 +21,14 @@ class ProveedorController
             exit;
         }
 
+        // Botón "Entendido" del aviso de facturas rechazadas automáticamente por vencimiento de
+        // plazo — solo marca esas notificaciones como vistas, no afecta nada más del flujo.
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['marcar_avisos_vistos'])) {
+            (new ProveedorModel())->marcarNotificacionesRechazoVistas($_SESSION['user']['cardcode']);
+            header('Location: index.php?controller=proveedor&action=dashboard');
+            exit;
+        }
+
         // Refrescar datos del usuario actual para asegurar consistencia
         $usuarioModel = new UsuarioModel();
         $userActualizado = $usuarioModel->getUserByCardcodeAndEmail(
@@ -53,6 +61,10 @@ class ProveedorController
         $resumen   = $proveedorModel->getResumenFacturas($cardcode);
         $facturas  = $proveedorModel->getUltimasFacturas($cardcode, 5);
         $pagos     = $facturaModel->getUltimosPagos($cardcode, 5);
+
+        // Aviso "en la aplicación" de facturas rechazadas automáticamente por vencimiento de
+        // plazo (cierre de mes) — banner en el dashboard, ver cron/verificar_plazos.php.
+        $facturasRechazoAutomatico = $proveedorModel->getFacturasRechazoAutomaticoNoVistas($cardcode);
 
         // Días de crédito reales desde SAP (no el valor fijo guardado en proveedores.dias_credito,
         // que puede quedar desactualizado). Si SAP no responde, se usa el valor local como respaldo.

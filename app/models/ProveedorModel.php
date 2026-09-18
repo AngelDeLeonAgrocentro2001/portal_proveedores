@@ -16,6 +16,30 @@ class ProveedorModel {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
+    // Facturas rechazadas automáticamente por vencimiento de plazo (cierre de mes, ver
+    // cron/verificar_plazos.php) que el proveedor todavía no ha visto — para el banner de aviso
+    // en su dashboard (ProveedorController::dashboard()).
+    public function getFacturasRechazoAutomaticoNoVistas($cardcode) {
+        $stmt = $this->pdo->prepare("
+            SELECT id, numero_factura, motivo_rechazo, fecha_rechazo
+            FROM facturas
+            WHERE cardcode = ? AND rechazo_automatico = 1 AND notificacion_rechazo_vista = 0
+            ORDER BY fecha_rechazo DESC
+        ");
+        $stmt->execute([$cardcode]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // Marca como vistas las notificaciones de rechazo automático del proveedor (botón
+    // "Entendido" del banner) — para que no se sigan mostrando en cada login.
+    public function marcarNotificacionesRechazoVistas($cardcode) {
+        $stmt = $this->pdo->prepare("
+            UPDATE facturas SET notificacion_rechazo_vista = 1
+            WHERE cardcode = ? AND rechazo_automatico = 1 AND notificacion_rechazo_vista = 0
+        ");
+        return $stmt->execute([$cardcode]);
+    }
+
     // Días de crédito reales desde SAP (OCRD.GroupNum -> OCTG.ExtraDays), igual que
     // SuperAdminModel::getDiasCreditoSAP() — se usa para mostrarlos en el dashboard del
     // proveedor en vez del valor fijo guardado en proveedores.dias_credito (que puede quedar

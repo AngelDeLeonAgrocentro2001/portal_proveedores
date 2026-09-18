@@ -365,6 +365,57 @@ private function calcularFechaPago($fecha_base, $dias_credito) {
         return $fecha->format('Y-m-d');
     }
 
+    // ====================== PLAZOS DE AUTORIZACIÓN (acuerdo Compras/Contabilidad) ======================
+    // Ventana rodante de 8 días que cierra cada martes: las facturas reportadas en esa ventana
+    // deben quedar aprobadas por Compras a más tardar el miércoles siguiente al cierre. Dado un
+    // día cualquiera, el "martes de cierre" es el primer martes en/después de ese día (si el
+    // propio día ya es martes, el límite es al día siguiente).
+    public static function fechaLimiteAprobacionCompras($fechaReporte) {
+        $fecha = new DateTime($fechaReporte);
+        $diaSemana = (int)$fecha->format('N'); // 1=lunes ... 7=domingo, martes=2
+        $diasHastaMartes = (2 - $diaSemana + 7) % 7;
+        $fecha->modify("+{$diasHastaMartes} days"); // martes de cierre de la ventana
+        $fecha->modify('+1 day'); // miércoles límite
+        return $fecha->format('Y-m-d');
+    }
+
+    // Suma $n días hábiles (lunes a viernes, sin calendario de feriados) a una fecha.
+    public static function sumarDiasHabiles($fecha, $n) {
+        $f = new DateTime($fecha);
+        $agregados = 0;
+        while ($agregados < $n) {
+            $f->modify('+1 day');
+            $diaSemana = (int)$f->format('N');
+            if ($diaSemana < 6) { // lunes(1) a viernes(5)
+                $agregados++;
+            }
+        }
+        return $f->format('Y-m-d');
+    }
+
+    // Fecha límite de cierre de mes: último día del mes de $fechaReporte + 2 días hábiles. Pasada
+    // esta fecha, si Compras no autorizó la factura, se rechaza automáticamente (ver
+    // cron/verificar_plazos.php).
+    public static function fechaLimiteCierreMes($fechaReporte) {
+        $fecha = new DateTime($fechaReporte);
+        $ultimoDiaMes = (clone $fecha)->modify('last day of this month')->format('Y-m-d');
+        return self::sumarDiasHabiles($ultimoDiaMes, 2);
+    }
+
+    // Viernes disponibles para reprogramar el pago de una factura que Compras aprobó fuera de
+    // plazo — siempre a partir de la fecha de pago ORIGINAL (nunca antes), en pasos de 7 días.
+    // La primera opción es la fecha original tal cual (confirmarla = no penalizar); las
+    // siguientes son penalizaciones de 1, 2... semanas.
+    public static function viernesDisponiblesParaPenalizacion($fechaPagoOriginal, $cantidad = 4) {
+        $opciones = [];
+        $fecha = new DateTime($fechaPagoOriginal);
+        for ($i = 0; $i < $cantidad; $i++) {
+            $opciones[] = $fecha->format('Y-m-d');
+            $fecha->modify('+7 days');
+        }
+        return $opciones;
+    }
+
 private function subirArchivo($file, $destinoDir) {
     if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
         return null;

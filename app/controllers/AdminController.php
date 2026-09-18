@@ -2,6 +2,7 @@
 // app/controllers/AdminController.php - VERSIÓN SIMPLIFICADA (SOLO FACTURAS)
 require_once BASE_PATH . 'app/models/FacturaModel.php';
 require_once BASE_PATH . 'app/models/ProveedorModel.php';
+require_once BASE_PATH . 'app/models/UsuarioModel.php';
 
 class AdminController {
     private $pdo;
@@ -561,6 +562,21 @@ public function getOrdenesDisponibles() {
     }
 
     try {
+        // Plazo semanal acordado: las facturas reportadas en la ventana que cierra cada martes
+        // deben quedar aprobadas por Compras a más tardar el miércoles siguiente. Si se aprueba
+        // después (jueves en adelante), se marca "fuera de plazo" — Contabilidad recibe aviso y
+        // decide si penaliza el pago (ver ContabilidadController::corregirFechaPagoPenalizacion).
+        // No cambia el flujo normal: la factura sigue pasando a Contabilidad igual que siempre.
+        $stmtFechaFactura = $this->pdo->prepare("SELECT fecha_emision FROM facturas WHERE id = ?");
+        $stmtFechaFactura->execute([$factura_id]);
+        $fechaEmisionFactura = $stmtFechaFactura->fetchColumn();
+
+        $fueraDePlazo = false;
+        if ($fechaEmisionFactura) {
+            $fechaLimite = FacturaModel::fechaLimiteAprobacionCompras($fechaEmisionFactura);
+            $fueraDePlazo = (date('Y-m-d') > $fechaLimite);
+        }
+
         // Cambiar estado a 'aprobada_compras' (pasa a Contabilidad)
         // NOTA: Ahora Contabilidad es quien envía a SAP, no Finanzas
         $stmt = $this->pdo->prepare("
@@ -569,12 +585,22 @@ public function getOrdenesDisponibles() {
                 aprobado_por_compras = ?,
                 fecha_aprobacion_compras = NOW(),
                 comentarios_compras = CONCAT(IFNULL(comentarios_compras, ''), '\n[', NOW(), '] ', ?, ' Aprobada por Compras: ', ?),
-                linea_seleccionada_compras = COALESCE(?, linea_seleccionada_compras)
+                linea_seleccionada_compras = COALESCE(?, linea_seleccionada_compras),
+                aprobado_fuera_de_plazo = ?,
+                fecha_pago_esperada_original = CASE WHEN ? = 1 AND fecha_pago_esperada_original IS NULL THEN fecha_pago_esperada ELSE fecha_pago_esperada_original END
             WHERE id = ?
         ");
 
-        if ($stmt->execute([$usuario, $usuario, $comentarios, $lineaSeleccionadaJson, $factura_id])) {
-            echo json_encode(['success' => true, 'message' => 'Factura aprobada correctamente. Pasa a Contabilidad para registro en SAP.']);
+        $fueraDePlazoInt = $fueraDePlazo ? 1 : 0;
+        if ($stmt->execute([$usuario, $usuario, $comentarios, $lineaSeleccionadaJson, $fueraDePlazoInt, $fueraDePlazoInt, $factura_id])) {
+            if ($fueraDePlazo) {
+                $this->notificarAprobacionFueraDePlazo($factura_id);
+            }
+            $mensaje = 'Factura aprobada correctamente. Pasa a Contabilidad para registro en SAP.';
+            if ($fueraDePlazo) {
+                $mensaje .= ' ⚠️ Se aprobó fuera del plazo semanal (después del miércoles) — se notificó a Contabilidad para que defina si penaliza la fecha de pago.';
+            }
+            echo json_encode(['success' => true, 'message' => $mensaje]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Error al aprobar']);
         }
@@ -584,6 +610,74 @@ public function getOrdenesDisponibles() {
     }
     exit;
 }
+
+    // Avisa por correo a todo el equipo de Contabilidad que una factura fue aprobada por
+    // Compras fuera del plazo semanal acordado — puramente informativo, no bloquea nada. No
+    // detiene el flujo si el correo falla (queda solo en error_log).
+    private function notificarAprobacionFueraDePlazo($factura_id) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT f.numero_factura, f.monto, f.moneda, f.fecha_emision, f.fecha_pago_esperada,
+                       p.nombre as proveedor_nombre, p.cardcode
+                FROM facturas f
+                JOIN proveedores p ON f.cardcode = p.cardcode
+                WHERE f.id = ?
+            ");
+            $stmt->execute([$factura_id]);
+            $factura = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$factura) {
+                return;
+            }
+
+            $usuarioModel = new UsuarioModel();
+            $contabilidad = $usuarioModel->getUsuariosPorRol('contabilidad');
+            if (empty($contabilidad)) {
+                error_log("notificarAprobacionFueraDePlazo: no hay usuarios con rol 'contabilidad' para notificar (factura $factura_id)");
+                return;
+            }
+
+            require_once BASE_PATH . 'app/models/MailerService.php';
+
+            $monedaSimbolo = simboloMoneda($factura['moneda'] ?? null);
+            $urlContabilidad = BASE_URL . 'index.php?controller=contabilidad&action=dashboard&buscar=' . urlencode($factura['numero_factura']);
+
+            $asunto = '⚠️ Factura aprobada fuera de plazo — ' . $factura['numero_factura'];
+            $cuerpoHtml = "
+                <div style='font-family: Arial, sans-serif; max-width:600px; margin:0 auto; color:#333;'>
+                    <h2 style='color:#b45309;'>⚠️ Factura aprobada fuera del plazo semanal</h2>
+                    <p>Compras aprobó la siguiente factura después del miércoles límite de la semana correspondiente:</p>
+                    <ul>
+                        <li><strong>Factura:</strong> " . htmlspecialchars($factura['numero_factura']) . "</li>
+                        <li><strong>Proveedor:</strong> " . htmlspecialchars($factura['proveedor_nombre']) . " (" . htmlspecialchars($factura['cardcode']) . ")</li>
+                        <li><strong>Monto:</strong> $monedaSimbolo " . number_format($factura['monto'], 2) . "</li>
+                        <li><strong>Fecha de reporte:</strong> " . date('d/m/Y', strtotime($factura['fecha_emision'])) . "</li>
+                        <li><strong>Fecha de pago original:</strong> " . date('d/m/Y', strtotime($factura['fecha_pago_esperada'])) . "</li>
+                    </ul>
+                    <p>Entra a Contabilidad para definir si se mantiene la fecha de pago original o se penaliza (se corre a un viernes posterior):</p>
+                    <p><a href='" . htmlspecialchars($urlContabilidad) . "' style='color:#0D7C66;'>Ver factura en Contabilidad</a></p>
+                    <div style='margin-top:20px; padding-top:20px; border-top:1px solid #ddd; font-size:12px; color:#666;'>
+                        <p>Este es un mensaje automático, por favor no respondas.</p>
+                        <p>Agrocentro &copy; " . date('Y') . "</p>
+                    </div>
+                </div>
+            ";
+            $cuerpoTexto = "Factura aprobada fuera del plazo semanal\n\n" .
+                "Factura: {$factura['numero_factura']}\n" .
+                "Proveedor: {$factura['proveedor_nombre']} ({$factura['cardcode']})\n" .
+                "Monto: $monedaSimbolo " . number_format($factura['monto'], 2) . "\n" .
+                "Fecha de reporte: " . date('d/m/Y', strtotime($factura['fecha_emision'])) . "\n" .
+                "Fecha de pago original: " . date('d/m/Y', strtotime($factura['fecha_pago_esperada'])) . "\n\n" .
+                "Entra a Contabilidad para definir si se penaliza la fecha de pago: $urlContabilidad";
+
+            foreach ($contabilidad as $destinatario) {
+                if (!empty($destinatario['email'])) {
+                    MailerService::enviarConAdjunto($destinatario['email'], $destinatario['username'], $asunto, $cuerpoHtml, $cuerpoTexto);
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Error en notificarAprobacionFueraDePlazo (factura $factura_id): " . $e->getMessage());
+        }
+    }
     
     // Rechazar factura (anula contraseña)
     public function rechazarFacturaCompras() {

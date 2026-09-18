@@ -34,9 +34,30 @@ $etiquetaDocumentos = $esMaterialEmpaque ? 'Ver Entradas de Mercancía' : 'Ver �
         <h2>Recordatorio</h2>
         <p>
             En caso de no ser lunes, la contraseña se tomará en cuenta el próximo lunes y solo se pagaran los dias viernes. Tomar en cuenta que tienen como fecha limite
-            subir la factura durante el mes. 
+            subir la factura durante el mes.
         </p>
     </div>
+
+    <!-- Aviso de facturas rechazadas automáticamente por vencimiento de plazo (cierre de mes) -->
+    <?php if (!empty($facturasRechazoAutomatico)): ?>
+    <div class="alert error" style="margin-bottom: 20px;">
+        <h3 style="margin:0 0 10px;">❌ Factura(s) rechazada(s) por vencimiento de plazo</h3>
+        <ul style="margin:0 0 10px 20px; padding:0;">
+            <?php foreach ($facturasRechazoAutomatico as $far): ?>
+                <li>
+                    <strong><?= htmlspecialchars($far['numero_factura']) ?></strong>
+                    — no fue autorizada dentro de los 2 días hábiles posteriores al cierre de mes.
+                    Ya puedes volver a reportarla.
+                </li>
+            <?php endforeach; ?>
+        </ul>
+        <form method="POST">
+            <input type="hidden" name="marcar_avisos_vistos" value="1">
+            <button type="submit" class="btn-small">Entendido</button>
+        </form>
+    </div>
+    <?php endif; ?>
+
     <a href="index.php?controller=proveedor&action=contacto" class="btn-action secondary">
     <span class="btn-icon">💬</span>
     Contacto y Soporte

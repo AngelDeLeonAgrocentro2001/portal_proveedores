@@ -1178,7 +1178,7 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert('✅ Factura aprobada correctamente. Pasa al área de Contabilidad.');
+                    alert('✅ ' + (data.message || 'Factura aprobada correctamente. Pasa al área de Contabilidad.'));
                     location.reload();
                 } else {
                     alert('❌ Error: ' + data.message);

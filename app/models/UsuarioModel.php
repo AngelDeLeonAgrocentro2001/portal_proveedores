@@ -107,6 +107,14 @@ public function login($cardcode, $email, $password) {
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
+    // Todos los usuarios internos (staff) con un rol dado — usado para notificar por correo a
+    // todo el equipo de Contabilidad, por ejemplo, sin tener que mantener una lista aparte.
+    public function getUsuariosPorRol($rol) {
+        $stmt = $this->pdo->prepare("SELECT id, email, username FROM usuarios WHERE rol = ?");
+        $stmt->execute([$rol]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // Actualiza la contraseña de un usuario identificado por su correo — usado por
     // "Olvidé mi contraseña" (AuthController::changePassword), mismo flujo que agrocaja-chica.
     public function actualizarPasswordPorEmail($email, $passwordPlano) {
