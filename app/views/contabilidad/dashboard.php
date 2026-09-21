@@ -127,35 +127,35 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
 <?php if (isset($factura) && $factura): ?>
 <div class="factura-detalle" id="factura-detalle">
     <h2>📄 Detalle de Factura</h2>
-    <table style="width:100%">
-        <tr>
-            <td width="150"><strong>Proveedor:</strong></td>
-            <td><?= htmlspecialchars($factura['proveedor_nombre'] ?? 'N/A') ?> (<?= htmlspecialchars($factura['cardcode'] ?? 'N/A') ?>)</td>
-        </tr>
-        <tr>
-            <td><strong>Factura:</strong></td>
-            <td><?= htmlspecialchars($factura['numero_factura'] ?? 'N/A') ?></td>
-        </tr>
-        <tr>
-            <td><strong>Monto:</strong></td>
-            <td><?= simboloMoneda($factura['moneda'] ?? null) ?> <?= number_format($factura['monto'] ?? 0, 2) ?></td>
-        </tr>
+    <div class="detalle-grid">
+        <div class="detalle-fila">
+            <div class="detalle-etiqueta">Proveedor</div>
+            <div class="detalle-valor"><?= htmlspecialchars($factura['proveedor_nombre'] ?? 'N/A') ?> (<?= htmlspecialchars($factura['cardcode'] ?? 'N/A') ?>)</div>
+        </div>
+        <div class="detalle-fila">
+            <div class="detalle-etiqueta">Factura</div>
+            <div class="detalle-valor"><?= htmlspecialchars($factura['numero_factura'] ?? 'N/A') ?></div>
+        </div>
+        <div class="detalle-fila">
+            <div class="detalle-etiqueta">Monto</div>
+            <div class="detalle-valor"><strong><?= simboloMoneda($factura['moneda'] ?? null) ?> <?= number_format($factura['monto'] ?? 0, 2) ?></strong></div>
+        </div>
         <?php if (!empty($comparacionOrden)): ?>
-        <tr>
-            <td><strong>Validación de Orden de Compra:</strong></td>
-            <td>
+        <div class="detalle-fila">
+            <div class="detalle-etiqueta">Validación de Orden de Compra</div>
+            <div class="detalle-valor">
                 <span class="badge-comparacion <?= $comparacionOrden['clase'] ?>">
                     <?= htmlspecialchars($comparacionOrden['label']) ?>
                 </span>
-                <span style="margin-left:10px; color:#666; font-size:0.85rem;">
+                <div class="detalle-nota">
                     <?= htmlspecialchars($comparacionOrden['tipo_corto'] ?? 'Orden') ?> (en SAP): Q <?= number_format($comparacionOrden['monto_orden'], 2) ?>
                     &middot; Diferencia: Q <?= number_format($comparacionOrden['diferencia'], 2) ?>
                     <?php if (($factura['moneda'] ?? 'GTQ') !== 'GTQ' && ($factura['moneda'] ?? '') !== ''): ?>
                         <br>(factura convertida a quetzales para comparar)
                     <?php endif; ?>
-                </span>
-            </td>
-        </tr>
+                </div>
+            </div>
+        </div>
         <?php endif; ?>
         <?php
         // Línea que Compras marcó en el detalle de saldo pendiente (solo cuando el monto no
@@ -163,9 +163,9 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
         $lineaCompras = json_decode($factura['linea_seleccionada_compras'] ?? 'null', true);
         ?>
         <?php if (is_array($lineaCompras) && !empty($lineaCompras)): ?>
-        <tr>
-            <td><strong>Línea marcada por Compras:</strong></td>
-            <td>
+        <div class="detalle-fila">
+            <div class="detalle-etiqueta">Línea marcada por Compras</div>
+            <div class="detalle-valor">
                 <?php
                 $tipoDocLinea = (($factura['tipo_proveedor'] ?? '') === 'material_empaque') ? 'Entrada' : 'Orden';
                 ?>
@@ -177,38 +177,38 @@ function safeDateTimeFormat($date, $format = 'd/m/Y H:i') {
                 <?php if (!empty($lineaCompras['saldo_pendiente'])): ?>
                     &middot; Saldo: Q <?= number_format($lineaCompras['saldo_pendiente'], 2) ?>
                 <?php endif; ?>
-                <span style="color:#666; font-size:0.8rem; display:block; margin-top:2px;">
+                <div class="detalle-nota">
                     Marcada por <?= htmlspecialchars($lineaCompras['seleccionado_por'] ?? 'Compras') ?>
                     <?php if (!empty($lineaCompras['fecha'])): ?>el <?= htmlspecialchars($lineaCompras['fecha']) ?><?php endif; ?>
                     — referencia informativa, no cambia el envío a SAP.
-                </span>
-            </td>
-        </tr>
+                </div>
+            </div>
+        </div>
         <?php endif; ?>
-        <tr>
-            <td><strong>Estado actual:</strong></td>
-            <td><span class="status <?= $factura['estado'] ?? '' ?>"><?= ucfirst(str_replace('_', ' ', $factura['estado'] ?? 'desconocido')) ?></span></td>
-        </tr>
+        <div class="detalle-fila">
+            <div class="detalle-etiqueta">Estado actual</div>
+            <div class="detalle-valor"><span class="status <?= $factura['estado'] ?? '' ?>"><?= ucfirst(str_replace('_', ' ', $factura['estado'] ?? 'desconocido')) ?></span></div>
+        </div>
         <?php if (!empty($factura['fecha_pago_esperada'])): ?>
-        <tr>
-            <td><strong>Fecha Pago Propuesta:</strong></td>
-            <td><strong style="color: #00695c;"><?= safeDateFormat($factura['fecha_pago_propuesta'] ?? $factura['fecha_pago_esperada']) ?></strong></td>
-        </tr>
+        <div class="detalle-fila">
+            <div class="detalle-etiqueta">Fecha Pago Propuesta</div>
+            <div class="detalle-valor"><strong style="color: #00695c;"><?= safeDateFormat($factura['fecha_pago_propuesta'] ?? $factura['fecha_pago_esperada']) ?></strong></div>
+        </div>
         <?php endif; ?>
-        
+
         <?php if (($factura['estado'] ?? '') === 'en_sap'): ?>
-        <tr>
-            <td><strong>Fecha Envío SAP:</strong></td>
-            <td><?= safeDateTimeFormat($factura['fecha_envio_sap'] ?? null) ?> por <?= htmlspecialchars($factura['enviado_por'] ?? 'N/A') ?></td>
-        </tr>
+        <div class="detalle-fila">
+            <div class="detalle-etiqueta">Fecha Envío SAP</div>
+            <div class="detalle-valor"><?= safeDateTimeFormat($factura['fecha_envio_sap'] ?? null) ?> por <?= htmlspecialchars($factura['enviado_por'] ?? 'N/A') ?></div>
+        </div>
         <?php if (!empty($factura['comprobante_sap'])): ?>
-        <tr>
-            <td><strong>Comprobante SAP:</strong></td>
-            <td><?= htmlspecialchars($factura['comprobante_sap']) ?></td>
-        </tr>
+        <div class="detalle-fila">
+            <div class="detalle-etiqueta">Comprobante SAP</div>
+            <div class="detalle-valor"><?= htmlspecialchars($factura['comprobante_sap']) ?></div>
+        </div>
         <?php endif; ?>
         <?php endif; ?>
-    </table>
+    </div>
     
     <?php if (!empty($factura['pdf_factura'])): ?>
     <div style="margin-top: 20px;">
@@ -823,6 +823,25 @@ window.onclick = function(event) {
 .alerta-saldo h3 { font-size: 1.05rem; color: #856404; }
 .alerta-saldo .data-table { width: 100%; border-collapse: collapse; background: white; }
 .alerta-saldo .data-table th, .alerta-saldo .data-table td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 0.9rem; }
+
+/* Detalle de Factura — filas ordenadas en vez de la tabla plana de siempre */
+.detalle-grid {
+    display: flex; flex-direction: column;
+    background: #fff; border: 1px solid #e8e8e8; border-radius: 10px;
+    overflow: hidden; margin: 12px 0 20px;
+}
+.detalle-fila {
+    display: flex; flex-wrap: wrap; gap: 6px 18px;
+    padding: 13px 18px; border-bottom: 1px solid #f0f0f0;
+}
+.detalle-fila:last-child { border-bottom: none; }
+.detalle-fila:nth-child(odd) { background: #fafbfa; }
+.detalle-etiqueta { flex: 0 0 210px; font-weight: 600; color: #55655a; font-size: 0.85rem; }
+.detalle-valor { flex: 1 1 260px; color: #222; font-size: 0.93rem; }
+.detalle-nota { margin-top: 4px; color: #777; font-size: 0.82rem; }
+@media (max-width: 640px) {
+    .detalle-etiqueta { flex-basis: 100%; }
+}
 
 .btn-reporte {
     transition: all 0.3s ease;

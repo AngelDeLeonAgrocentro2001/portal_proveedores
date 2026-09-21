@@ -95,49 +95,78 @@
 <div id="modalArchivos" class="modal" style="display:none;">
     <div class="modal-content">
         <span class="close" onclick="cerrarModal()">&times;</span>
-        <h3>Archivos de la Factura #<span id="modalFacturaNum"></span></h3>
-        <div id="contenidoArchivos"></div>
+        <h3 class="modal-archivos-titulo">📎 Archivos de la Factura</h3>
+        <p class="modal-archivos-subtitulo" id="modalFacturaNum"></p>
+        <div id="contenidoArchivos" class="archivos-lista"></div>
     </div>
 </div>
 
+<style>
+.modal-archivos-titulo { margin: 0 0 2px; font-size: 1.15rem; }
+.modal-archivos-subtitulo { margin: 0 0 14px; color: #666; font-size: 0.9rem; font-weight: 600; }
+.archivos-lista { display: flex; flex-direction: column; }
+.archivo-fila {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+    gap: 10px; padding: 13px 2px; border-bottom: 1px solid #eee;
+}
+.archivo-fila:last-child { border-bottom: none; }
+.archivo-etiqueta { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #2c3e2f; font-size: 0.92rem; }
+.archivo-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+
 <script>
     function verArchivos(id, numeroFactura, tieneRetencionIva, tieneRetencionIsr, docentry) {
-        document.getElementById('modalFacturaNum').textContent = numeroFactura;
+        document.getElementById('modalFacturaNum').textContent = 'Factura #' + numeroFactura;
 
         let html = `
-        <p><strong>Factura PDF:</strong>
-            <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=factura" target="_blank" class="btn-small">Descargar Factura</a>
-        </p>
-        <p><strong>Constancia (si aplica):</strong>
-            <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=constancia" target="_blank" class="btn-small">Descargar Constancia</a>
-        </p>
+        <div class="archivo-fila">
+            <span class="archivo-etiqueta">📄 Factura PDF</span>
+            <span class="archivo-acciones">
+                <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=factura" target="_blank" class="btn-small">⬇️ Descargar</a>
+            </span>
+        </div>
+        <div class="archivo-fila">
+            <span class="archivo-etiqueta">📋 Constancia (si aplica)</span>
+            <span class="archivo-acciones">
+                <a href="index.php?controller=proveedor&action=descargar&id=${id}&tipo=constancia" target="_blank" class="btn-small">⬇️ Descargar</a>
+            </span>
+        </div>
         `;
 
         if (docentry) {
             html += `
-        <p><strong>Orden de Compra PDF:</strong>
-            <a href="index.php?controller=proveedor&action=pdfOrdenCompra&docentry=${docentry}" target="_blank" class="btn-small">Descargar Orden</a>
-        </p>
+        <div class="archivo-fila">
+            <span class="archivo-etiqueta">🛒 Orden de Compra PDF</span>
+            <span class="archivo-acciones">
+                <a href="index.php?controller=proveedor&action=pdfOrdenCompra&docentry=${docentry}" target="_blank" class="btn-small">⬇️ Descargar</a>
+            </span>
+        </div>
             `;
         }
 
         if (tieneRetencionIva) {
             html += `
-        <p><strong>Constancia Retención IVA:</strong>
-            <a href="index.php?controller=proveedor&action=descargarRetencionIVA&id=${id}&modo=ver" target="_blank" class="btn-small">👁️ Ver</a>
-            <a href="index.php?controller=proveedor&action=descargarRetencionIVA&id=${id}" class="btn-small">⬇️ Descargar</a>
-            <button type="button" class="btn-small" onclick="enviarRetencionCorreo(${id}, 'iva', this)">📧 Enviar a mi correo</button>
-        </p>
+        <div class="archivo-fila">
+            <span class="archivo-etiqueta">🧾 Constancia Retención IVA</span>
+            <span class="archivo-acciones">
+                <a href="index.php?controller=proveedor&action=descargarRetencionIVA&id=${id}&modo=ver" target="_blank" class="btn-small">👁️ Ver</a>
+                <a href="index.php?controller=proveedor&action=descargarRetencionIVA&id=${id}" class="btn-small">⬇️ Descargar</a>
+                <button type="button" class="btn-small" onclick="enviarRetencionCorreo(${id}, 'iva', this)">📧 Enviar a mi correo</button>
+            </span>
+        </div>
             `;
         }
 
         if (tieneRetencionIsr) {
             html += `
-        <p><strong>Constancia Retención ISR:</strong>
-            <a href="index.php?controller=proveedor&action=descargarRetencionISR&id=${id}&modo=ver" target="_blank" class="btn-small">👁️ Ver</a>
-            <a href="index.php?controller=proveedor&action=descargarRetencionISR&id=${id}" class="btn-small">⬇️ Descargar</a>
-            <button type="button" class="btn-small" onclick="enviarRetencionCorreo(${id}, 'isr', this)">📧 Enviar a mi correo</button>
-        </p>
+        <div class="archivo-fila">
+            <span class="archivo-etiqueta">🧾 Constancia Retención ISR</span>
+            <span class="archivo-acciones">
+                <a href="index.php?controller=proveedor&action=descargarRetencionISR&id=${id}&modo=ver" target="_blank" class="btn-small">👁️ Ver</a>
+                <a href="index.php?controller=proveedor&action=descargarRetencionISR&id=${id}" class="btn-small">⬇️ Descargar</a>
+                <button type="button" class="btn-small" onclick="enviarRetencionCorreo(${id}, 'isr', this)">📧 Enviar a mi correo</button>
+            </span>
+        </div>
             `;
         }
 
