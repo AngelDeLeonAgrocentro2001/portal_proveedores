@@ -15,6 +15,25 @@
         .alerta-saldo .data-table { width: 100%; border-collapse: collapse; background: white; }
         .alerta-saldo .data-table th, .alerta-saldo .data-table td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 0.9rem; }
 
+        /* Detalle de Factura — filas ordenadas en vez de la tabla plana de siempre */
+        .detalle-grid {
+            display: flex; flex-direction: column;
+            background: #fff; border: 1px solid #e8e8e8; border-radius: 10px;
+            overflow: hidden; margin: 12px 0 20px;
+        }
+        .detalle-fila {
+            display: flex; flex-wrap: wrap; gap: 6px 18px;
+            padding: 13px 18px; border-bottom: 1px solid #f0f0f0;
+        }
+        .detalle-fila:last-child { border-bottom: none; }
+        .detalle-fila:nth-child(odd) { background: #fafbfa; }
+        .detalle-etiqueta { flex: 0 0 210px; font-weight: 600; color: #55655a; font-size: 0.85rem; }
+        .detalle-valor { flex: 1 1 260px; color: #222; font-size: 0.93rem; }
+        .detalle-nota { margin-top: 4px; color: #777; font-size: 0.82rem; }
+        @media (max-width: 640px) {
+            .detalle-etiqueta { flex-basis: 100%; }
+        }
+
         .admin-header {
             background: linear-gradient(135deg, var(--dark-bg) 0%, #16301f 100%);
             color: white;
@@ -510,30 +529,30 @@
         <?php if ($factura): ?>
             <div class="factura-detalle">
                 <h2>📄 Detalle de Factura</h2>
-                <table style="width:100%">
-                    <tr>
-                        <td width="150"><strong>Proveedor:</strong></td>
-                        <td><?= htmlspecialchars($factura['proveedor_nombre']) ?> (<?= htmlspecialchars($factura['cardcode']) ?>)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Factura:</strong></td>
-                        <td><?= htmlspecialchars($factura['numero_factura']) ?></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Monto:</strong></td>
-                        <td><?= simboloMoneda($factura['moneda'] ?? null) ?> <?= number_format($factura['monto'], 2) ?></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Estado:</strong></td>
-                        <td>
+                <div class="detalle-grid">
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Proveedor</div>
+                        <div class="detalle-valor"><?= htmlspecialchars($factura['proveedor_nombre']) ?> (<?= htmlspecialchars($factura['cardcode']) ?>)</div>
+                    </div>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Factura</div>
+                        <div class="detalle-valor"><?= htmlspecialchars($factura['numero_factura']) ?></div>
+                    </div>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Monto</div>
+                        <div class="detalle-valor"><strong><?= simboloMoneda($factura['moneda'] ?? null) ?> <?= number_format($factura['monto'], 2) ?></strong></div>
+                    </div>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Estado</div>
+                        <div class="detalle-valor">
                             <span class="status <?= $factura['estado'] ?>">
                                 <?= ucfirst(str_replace('_', ' ', $factura['estado'])) ?>
                             </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><strong>Contraseña:</strong></td>
-                        <td>
+                        </div>
+                    </div>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Contraseña</div>
+                        <div class="detalle-valor">
                             <?php if (!empty($factura['contrasena_pago'])): ?>
                                 <div class="contrasena-actual" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                                     <strong><?= htmlspecialchars($factura['contrasena_pago']) ?></strong>
@@ -545,11 +564,11 @@
                             <?php else: ?>
                                 <span style="color:#999;">No generada</span>
                             <?php endif; ?>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><strong>Órdenes de Compra:</strong></td>
-                        <td>
+                        </div>
+                    </div>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Órdenes de Compra</div>
+                        <div class="detalle-valor">
                             <?php
                             $ordenesActuales = json_decode($factura['ordenes_relacionadas'] ?? '[]', true);
                             if (!empty($ordenesActuales)) {
@@ -558,55 +577,55 @@
                                 echo '<span style="color:#999;">No definidas</span>';
                             }
                             ?>
-                        </td>
-                    </tr>
+                        </div>
+                    </div>
                     <?php if (!empty($comparacionOrden)): ?>
-                    <tr>
-                        <td><strong>Validación de Orden de Compra:</strong></td>
-                        <td>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Validación de Orden de Compra</div>
+                        <div class="detalle-valor">
                             <span class="badge-comparacion <?= $comparacionOrden['clase'] ?>">
                                 <?= htmlspecialchars($comparacionOrden['label']) ?>
                             </span>
-                            <span style="margin-left:10px; color:#666; font-size:0.85rem;">
+                            <div class="detalle-nota">
                                 Orden: Q <?= number_format($comparacionOrden['monto_orden'], 2) ?>
                                 &middot; Diferencia: Q <?= number_format($comparacionOrden['diferencia'], 2) ?>
-                            </span>
-                        </td>
-                    </tr>
+                            </div>
+                        </div>
+                    </div>
                     <?php endif; ?>
                     <?php $lineaSeleccionadaCompras = json_decode($factura['linea_seleccionada_compras'] ?? 'null', true); ?>
                     <?php if (!empty($lineaSeleccionadaCompras)): ?>
-                    <tr>
-                        <td><strong>Línea seleccionada por Compras:</strong></td>
-                        <td>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Línea seleccionada por Compras</div>
+                        <div class="detalle-valor">
                             Orden <?= htmlspecialchars($lineaSeleccionadaCompras['docnum'] ?? '') ?>
                             (DocEntry <?= (int)($lineaSeleccionadaCompras['docentry'] ?? 0) ?>),
                             línea #<?= (int)($lineaSeleccionadaCompras['linenum'] ?? 0) ?>
                             — <?= htmlspecialchars($lineaSeleccionadaCompras['descripcion'] ?? '') ?>
                             (saldo pendiente al momento: Q <?= number_format($lineaSeleccionadaCompras['saldo_pendiente'] ?? 0, 2) ?>)
-                            <br><small style="color:#666;">Marcada por <?= htmlspecialchars($lineaSeleccionadaCompras['seleccionado_por'] ?? '') ?> el <?= htmlspecialchars($lineaSeleccionadaCompras['fecha'] ?? '') ?></small>
-                        </td>
-                    </tr>
+                            <div class="detalle-nota">Marcada por <?= htmlspecialchars($lineaSeleccionadaCompras['seleccionado_por'] ?? '') ?> el <?= htmlspecialchars($lineaSeleccionadaCompras['fecha'] ?? '') ?></div>
+                        </div>
+                    </div>
                     <?php endif; ?>
                     <?php if (!empty($factura['fecha_inicio_credito'])): ?>
-                    <tr>
-                        <td><strong>Fecha Inicio Crédito:</strong></td>
-                        <td><?= date('d/m/Y', strtotime($factura['fecha_inicio_credito'])) ?></td>
-                    </tr>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Fecha Inicio Crédito</div>
+                        <div class="detalle-valor"><?= date('d/m/Y', strtotime($factura['fecha_inicio_credito'])) ?></div>
+                    </div>
                     <?php endif; ?>
                     <?php if (!empty($factura['fecha_pago_esperada'])): ?>
-                    <tr>
-                        <td><strong>Fecha Pago Esperada:</strong></td>
-                        <td><?= date('d/m/Y', strtotime($factura['fecha_pago_esperada'])) ?></td>
-                    </tr>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Fecha Pago Esperada</div>
+                        <div class="detalle-valor"><?= date('d/m/Y', strtotime($factura['fecha_pago_esperada'])) ?></div>
+                    </div>
                     <?php endif; ?>
                     <?php if (!empty($factura['comentario_transporte'])): ?>
-                    <tr>
-                        <td><strong>Comentario del Transportista:</strong></td>
-                        <td><?= nl2br(htmlspecialchars($factura['comentario_transporte'])) ?></td>
-                    </tr>
+                    <div class="detalle-fila">
+                        <div class="detalle-etiqueta">Comentario del Transportista</div>
+                        <div class="detalle-valor"><?= nl2br(htmlspecialchars($factura['comentario_transporte'])) ?></div>
+                    </div>
                     <?php endif; ?>
-                </table>
+                </div>
 
                 <?php
                 $viajesIncluidos = json_decode($factura['viajes_data'] ?? '[]', true) ?: [];
