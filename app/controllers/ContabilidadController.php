@@ -1148,6 +1148,8 @@ class ContabilidadController
         $docDate = !empty($factura['fecha_factura']) ? $factura['fecha_factura'] : $fechaActual;
         $taxDate = !empty($factura['fecha_factura_sat']) ? $factura['fecha_factura_sat'] : $docDate;
         $docDueDate = date('Y-m-d', strtotime($docDate . ' +30 days'));
+        // Fecha de declaración del anexo (mes y año) para el libro de compras — mismo mes que DocDate.
+        $fechaDeclaracionAnexo = date('Y-m-01', strtotime($docDate));
 
         $nitProveedor = $factura['nit'] ?? '';
         // Usar tipo_factura guardado explícitamente; fallback a detección por NIT
@@ -1439,6 +1441,7 @@ class ContabilidadController
             "U_NOMBRE" => $nombreEmisor,
             "U_DIRECCI" => $proveedor['direccion'] ?? 'Ciudad de Guatemala',  // Dirección por defecto
             "U_F_Tipo" => $tipoDocumentoFiscal,
+            "U_F_DEC_D" => $fechaDeclaracionAnexo,
             "Series" => 82,  // ← CAMBIADO a 653 según tu ejemplo (antes era 82)
             "NumAtCard" => $factura['numero_factura'] . '-' . $factura_id,  // Formato como en ejemplo
             "DocCurrency" => $monedaFactura,
